@@ -1,0 +1,778 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Vehicle Manager{% endblock %}
+
+{% block content %}
+<div class="header">
+    <div class="header-content">
+        <div class="header-left">
+            <h1 class="page-title">
+                <i class="fas fa-chart-line"></i>
+                Dashboard
+            </h1>
+            <p class="page-subtitle">Overview of your vehicle management system</p>
+        </div>
+        <div class="header-right">
+            <button class="btn btn-secondary" onclick="window.print()">
+                <i class="fas fa-download"></i>
+                <span>Export Report</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="stats-grid">
+    <div class="stat-card income-card">
+        <div class="stat-icon-wrapper">
+            <div class="stat-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                <i class="fas fa-arrow-trend-up"></i>
+            </div>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Total Income</div>
+            <div class="stat-value">₹{{ total_income|floatformat:2 }}</div>
+            <div class="stat-trend positive">
+                <i class="fas fa-arrow-up"></i>
+                <span>Revenue from rentals</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card expense-card">
+        <div class="stat-icon-wrapper">
+            <div class="stat-icon" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+                <i class="fas fa-arrow-trend-down"></i>
+            </div>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Total Expenses</div>
+            <div class="stat-value">₹{{ total_expense|floatformat:2 }}</div>
+            <div class="stat-trend negative">
+                <i class="fas fa-arrow-down"></i>
+                <span>Operating costs</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card profit-card">
+        <div class="stat-icon-wrapper">
+            <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+                <i class="fas fa-wallet"></i>
+            </div>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Net Profit</div>
+            <div class="stat-value {% if profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+                ₹{{ profit|floatformat:2 }}
+            </div>
+            <div class="stat-trend {% if profit >= 0 %}positive{% else %}negative{% endif %}">
+                <i class="fas fa-{% if profit >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i>
+                <span>{% if profit >= 0 %}Profitable{% else %}Loss{% endif %}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card vehicles-card">
+        <div class="stat-icon-wrapper">
+            <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                <i class="fas fa-car-side"></i>
+            </div>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Active Vehicles</div>
+            <div class="stat-value">{{ active_vehicles_count }}</div>
+            <div class="stat-trend neutral">
+                <i class="fas fa-circle"></i>
+                <span>In your fleet</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart Section -->
+<div class="chart-section">
+    <div class="chart-header">
+        <div>
+            <h2 class="chart-title">
+                <i class="fas fa-chart-area"></i>
+                Financial Overview
+            </h2>
+            <p class="chart-subtitle">Monthly income vs expenses analysis</p>
+        </div>
+        <div class="chart-legend">
+            <div class="legend-item">
+                <span class="legend-dot" style="background: #10b981;"></span>
+                <span>Income</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-dot" style="background: #ef4444;"></span>
+                <span>Expense</span>
+            </div>
+        </div>
+    </div>
+    <div class="chart-container">
+        <canvas id="revenueChart"></canvas>
+    </div>
+</div>
+
+<!-- Monthly Data Table -->
+<div class="table-section">
+    <div class="table-header">
+        <h2 class="table-title">
+            <i class="fas fa-table"></i>
+            Monthly Breakdown
+        </h2>
+        <div class="table-actions">
+            <button class="filter-btn active" onclick="filterTable('all')">
+                <i class="fas fa-calendar"></i>
+                All Months
+            </button>
+            <button class="filter-btn" onclick="filterTable('profitable')">
+                <i class="fas fa-arrow-up"></i>
+                Profitable
+            </button>
+            <button class="filter-btn" onclick="filterTable('loss')">
+                <i class="fas fa-arrow-down"></i>
+                Loss
+            </button>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="modern-table">
+            <thead>
+                <tr>
+                    <th>
+                        <div class="th-content">
+                            <i class="fas fa-calendar-alt"></i>
+                            <span>Month</span>
+                        </div>
+                    </th>
+                    <th>
+                        <div class="th-content">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>Income</span>
+                        </div>
+                    </th>
+                    <th>
+                        <div class="th-content">
+                            <i class="fas fa-arrow-down"></i>
+                            <span>Expense</span>
+                        </div>
+                    </th>
+                    <th>
+                        <div class="th-content">
+                            <i class="fas fa-wallet"></i>
+                            <span>Profit/Loss</span>
+                        </div>
+                    </th>
+                    <th>
+                        <div class="th-content">
+                            <i class="fas fa-chart-pie"></i>
+                            <span>Margin</span>
+                        </div>
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="monthlyTableBody">
+                {% for item in monthly_data %}
+                <tr class="table-row" data-profit="{{ item.profit }}">
+                    <td>
+                        <div class="month-cell">
+                            <i class="fas fa-calendar"></i>
+                            <span>{{ item.month }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="amount-cell income">
+                            <i class="fas fa-plus-circle"></i>
+                            <span>₹{{ item.income|floatformat:2 }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="amount-cell expense">
+                            <i class="fas fa-minus-circle"></i>
+                            <span>₹{{ item.expense|floatformat:2 }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="amount-cell {% if item.profit >= 0 %}profit{% else %}loss{% endif %}">
+                            <i class="fas fa-{% if item.profit >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i>
+                            <span>₹{{ item.profit|floatformat:2 }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="margin-cell">
+                            {% if item.income > 0 %}
+                            {% widthratio item.profit item.income 100 as margin %}
+                            <div class="progress-bar">
+                                <div class="progress-fill {% if margin >= 0 %}positive{% else %}negative{% endif %}"
+                                    style="width: {% if margin >= 0 %}{{ margin }}%{% else %}0%{% endif %};">
+                                </div>
+                            </div>
+                            <span class="margin-text">{{ margin }}%</span>
+                            {% else %}
+                            <span class="margin-text">N/A</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="empty-row">
+                        <div class="empty-content">
+                            <i class="fas fa-chart-line"></i>
+                            <p>No data available yet</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    /* Header Styles */
+    .header-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .header-left {
+        flex: 1;
+        min-width: 250px;
+    }
+
+    .page-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 1.875rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0 0 0.5rem 0;
+    }
+
+    .page-title i {
+        color: var(--primary-color);
+    }
+
+    .page-subtitle {
+        color: #6b7280;
+        font-size: 0.95rem;
+        margin: 0;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1.5rem;
+        margin: 2rem 0;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 1rem;
+        padding: 1.75rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border: 1px solid #f3f4f6;
+        transition: all 0.3s ease;
+        display: flex;
+        gap: 1.25rem;
+        align-items: flex-start;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .stat-icon-wrapper {
+        flex-shrink: 0;
+    }
+
+    .stat-icon {
+        width: 64px;
+        height: 64px;
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.75rem;
+    }
+
+    .stat-content {
+        flex: 1;
+    }
+
+    .stat-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-value {
+        font-size: 1.875rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1;
+        margin-bottom: 0.75rem;
+    }
+
+    .stat-trend {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: 0.8125rem;
+        font-weight: 500;
+    }
+
+    .stat-trend.positive {
+        color: #10b981;
+    }
+
+    .stat-trend.negative {
+        color: #ef4444;
+    }
+
+    .stat-trend.neutral {
+        color: #6b7280;
+    }
+
+    .stat-trend i {
+        font-size: 0.75rem;
+    }
+
+    /* Chart Section */
+    .chart-section {
+        background: white;
+        border-radius: 1rem;
+        padding: 2rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border: 1px solid #f3f4f6;
+        margin-bottom: 2rem;
+    }
+
+    .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .chart-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0 0 0.25rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .chart-title i {
+        color: var(--primary-color);
+    }
+
+    .chart-subtitle {
+        color: #6b7280;
+        font-size: 0.875rem;
+        margin: 0;
+    }
+
+    .chart-legend {
+        display: flex;
+        gap: 1.5rem;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .legend-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+    }
+
+    .chart-container {
+        height: 350px;
+        position: relative;
+    }
+
+    /* Table Section */
+    .table-section {
+        background: white;
+        border-radius: 1rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border: 1px solid #f3f4f6;
+        overflow: hidden;
+    }
+
+    .table-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid #f3f4f6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .table-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .table-title i {
+        color: var(--primary-color);
+    }
+
+    .table-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .filter-btn {
+        padding: 0.5rem 1rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.5rem;
+        background: white;
+        color: #6b7280;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+    }
+
+    .filter-btn:hover {
+        background: #f9fafb;
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+    }
+
+    .filter-btn.active {
+        background: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
+    }
+
+    /* Modern Table */
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    .modern-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .modern-table thead {
+        background: #f9fafb;
+    }
+
+    .modern-table th {
+        padding: 1rem 1.5rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #6b7280;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .th-content {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .modern-table tbody tr {
+        border-bottom: 1px solid #f3f4f6;
+        transition: all 0.2s;
+    }
+
+    .modern-table tbody tr:hover {
+        background: #f9fafb;
+    }
+
+    .modern-table td {
+        padding: 1.25rem 1.5rem;
+    }
+
+    .month-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .month-cell i {
+        color: var(--primary-color);
+    }
+
+    .amount-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+    }
+
+    .amount-cell.income {
+        color: #10b981;
+    }
+
+    .amount-cell.expense {
+        color: #ef4444;
+    }
+
+    .amount-cell.profit {
+        color: #10b981;
+    }
+
+    .amount-cell.loss {
+        color: #ef4444;
+    }
+
+    .amount-cell i {
+        font-size: 0.875rem;
+    }
+
+    .margin-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .progress-bar {
+        flex: 1;
+        height: 8px;
+        background: #f3f4f6;
+        border-radius: 1rem;
+        overflow: hidden;
+    }
+
+    .progress-fill {
+        height: 100%;
+        border-radius: 1rem;
+        transition: width 0.3s ease;
+    }
+
+    .progress-fill.positive {
+        background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+    }
+
+    .progress-fill.negative {
+        background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+    }
+
+    .margin-text {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #6b7280;
+        min-width: 50px;
+        text-align: right;
+    }
+
+    .empty-row {
+        padding: 4rem 2rem !important;
+    }
+
+    .empty-content {
+        text-align: center;
+        color: #9ca3af;
+    }
+
+    .empty-content i {
+        font-size: 3rem;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+        .header-content {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .header-right {
+            width: 100%;
+        }
+
+        .header-right .btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .chart-header {
+            flex-direction: column;
+        }
+
+        .table-actions {
+            width: 100%;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            flex: 1;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+        }
+    }
+</style>
+
+{{ monthly_data|json_script:"monthly-data" }}
+<script>
+    // Chart.js configuration
+    document.addEventListener('DOMContentLoaded', function () {
+        const canvas = document.getElementById('revenueChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+
+        // Get data from JSON script
+        const monthlyData = JSON.parse(document.getElementById('monthly-data').textContent);
+
+        // Extract arrays
+        const labels = monthlyData.map(item => item.month);
+        const incomeData = monthlyData.map(item => item.income || 0);
+        const expenseData = monthlyData.map(item => item.expense || 0);
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Income',
+                        data: incomeData,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        borderWidth: 3,
+                    },
+                    {
+                        label: 'Expense',
+                        data: expenseData,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        borderWidth: 3,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        padding: 12,
+                        borderRadius: 8,
+                        titleFont: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        bodyFont: {
+                            size: 13
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: '#f3f4f6',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            callback: function (value) {
+                                return '₹' + value.toLocaleString();
+                            },
+                            color: '#6b7280',
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false,
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#6b7280',
+                            font: {
+                                size: 12
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+
+    // Table filtering
+    function filterTable(type) {
+        const rows = document.querySelectorAll('.table-row');
+        const buttons = document.querySelectorAll('.filter-btn');
+
+        // Update active button
+        buttons.forEach(btn => btn.classList.remove('active'));
+        event.target.closest('.filter-btn').classList.add('active');
+
+        // Filter rows
+        rows.forEach(row => {
+            const profit = parseFloat(row.dataset.profit);
+
+            if (type === 'all') {
+                row.style.display = '';
+            } else if (type === 'profitable' && profit >= 0) {
+                row.style.display = '';
+            } else if (type === 'loss' && profit < 0) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+</script>
+{% endblock %}

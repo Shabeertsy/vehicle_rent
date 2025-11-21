@@ -1,0 +1,420 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ vehicle.name }} - Details{% endblock %}
+
+{% block content %}
+<div class="header">
+    <div>
+        <h1 class="page-title">{{ vehicle.name }}</h1>
+        <p class="text-secondary">{{ vehicle.registration_number }}</p>
+    </div>
+    <div class="flex gap-2">
+        <a href="{% url 'import_data' %}?vehicle_id={{ vehicle.id }}" class="btn btn-primary"
+            style="background-color: var(--warning);"><i class="fas fa-file-import"></i> Import Excel</a>
+        <a href="{% url 'vehicle_edit' vehicle.id %}" class="btn btn-primary">Edit Vehicle</a>
+        <a href="{% url 'vehicle_delete' vehicle.id %}" class="btn btn-danger">Delete</a>
+    </div>
+</div>
+
+<!-- Month/Year filters and monthly vehicle summary -->
+<div style="margin: 2.5rem 0 2.3rem 0">
+    <div class="filter-bar" style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem;">
+        <div>
+            <div class="month-btn-group" style="display: flex; gap: 2px;">
+                <!-- Hardcoded month buttons to avoid template split/for/zip limitations -->
+                <button type="button" class="month-btn" data-month="01" onclick="selectMonth(this)"
+                    id="month-btn-01">Jan</button>
+                <button type="button" class="month-btn" data-month="02" onclick="selectMonth(this)"
+                    id="month-btn-02">Feb</button>
+                <button type="button" class="month-btn" data-month="03" onclick="selectMonth(this)"
+                    id="month-btn-03">Mar</button>
+                <button type="button" class="month-btn" data-month="04" onclick="selectMonth(this)"
+                    id="month-btn-04">Apr</button>
+                <button type="button" class="month-btn" data-month="05" onclick="selectMonth(this)"
+                    id="month-btn-05">May</button>
+                <button type="button" class="month-btn" data-month="06" onclick="selectMonth(this)"
+                    id="month-btn-06">Jun</button>
+                <button type="button" class="month-btn" data-month="07" onclick="selectMonth(this)"
+                    id="month-btn-07">Jul</button>
+                <button type="button" class="month-btn" data-month="08" onclick="selectMonth(this)"
+                    id="month-btn-08">Aug</button>
+                <button type="button" class="month-btn" data-month="09" onclick="selectMonth(this)"
+                    id="month-btn-09">Sep</button>
+                <button type="button" class="month-btn" data-month="10" onclick="selectMonth(this)"
+                    id="month-btn-10">Oct</button>
+                <button type="button" class="month-btn" data-month="11" onclick="selectMonth(this)"
+                    id="month-btn-11">Nov</button>
+                <button type="button" class="month-btn" data-month="12" onclick="selectMonth(this)"
+                    id="month-btn-12">Dec</button>
+            </div>
+        </div>
+        <div>
+            <select id="year-select" class="form-select form-select-sm" style="width: auto; display: inline-block;">
+                <!-- JS will populate years -->
+            </select>
+        </div>
+    </div>
+
+
+    <!-- Stats for this vehicle -->
+    <div class="card-grid mt-5">
+        <div class="card">
+            <div class="card-title">Monthly Revenue</div>
+            <div class="card-value text-success" id="card-revenue">₹0.00</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Monthly Expenses</div>
+            <div class="card-value text-danger" id="card-expense">₹0.00</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Monthly Profit</div>
+            <div class="card-value" id="card-profit">₹0.00</div>
+        </div>
+    </div>
+
+    <!-- Monthly vehicle summary table -->
+    <div style="margin-top:1.3rem;">
+        <div style="overflow-x:auto;">
+            <table class="monthly-summary-table" id="monthly-summary-table" style="min-width:610px;">
+                <thead>
+                    <tr>
+                        <th>Month</th>
+                        <th>Revenue</th>
+                        <th>Expenses</th>
+                        <th>Profit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in monthly_data %}
+                    <tr data-month="{{ row.month|date:'m' }}" data-year="{{ row.month|date:'Y' }}"
+                        data-income="{{ row.income }}" data-expense="{{ row.expense }}" data-profit="{{ row.profit }}">
+                        <td>{{ row.month|date:"F Y" }}</td>
+                        <td class="text-success">₹{{ row.income|floatformat:2 }}</td>
+                        <td class="text-danger">₹{{ row.expense|floatformat:2 }}</td>
+                        <td class="{% if row.profit >= 0 %}text-success{% else %}text-danger{% endif %}">₹{{
+                            row.profit|floatformat:2 }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr data-empty="true">
+                        <td colspan="4" class="text-secondary" style="text-align: center;">No data available</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- Tabs -->
+<div class="card" style="margin-bottom: 2rem;">
+    <div style="border-bottom: 1px solid #e5e7eb; margin-bottom: 1.5rem;">
+        <button class="tab-btn active" onclick="openTab(event, 'rentals')">Rentals</button>
+        <button class="tab-btn" onclick="openTab(event, 'expenses')">Expenses</button>
+    </div>
+
+    <!-- Rentals Tab -->
+    <div id="rentals" class="tab-content" style="display: block;">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="card-title" style="font-size: 1.1rem; color: var(--text-primary);">Rental History</h3>
+            <a href="{% url 'rental_create' vehicle.id %}" class="btn btn-primary btn-sm">Add Rental</a>
+        </div>
+        <div class="table-container" style="box-shadow: none; padding: 0;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date Out</th>
+                        <th>Time Out</th>
+                        <th>Date In</th>
+                        <th>Time In</th>
+                        <th>Customer</th>
+                        <th>Destination</th>
+                        <th>Days</th>
+                        <th>Rent/Day</th>
+                        <th>Total</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rental in rentals %}
+                    <tr>
+                        <td>{{ rental.date_out }}</td>
+                        <td>
+                            {% if rental.time_out %}
+                            {{ rental.time_out|time:"H:i" }}
+                            {% else %}
+                            &mdash;
+                            {% endif %}
+                        </td>
+                        <td>{{ rental.date_in }}</td>
+                        <td>
+                            {% if rental.time_in %}
+                            {{ rental.time_in|time:"H:i" }}
+                            {% else %}
+                            &mdash;
+                            {% endif %}
+                        </td>
+                        <td>{{ rental.customer_name }}</td>
+                        <td>{{ rental.destination }}</td>
+                        <td>{{ rental.days_of_rent }}</td>
+                        <td>₹{{ rental.rent_per_day }}</td>
+                        <td>₹{{ rental.total_amount_received }}</td>
+                        <td>
+                            <a href="{% url 'rental_edit' rental.id %}" class="text-primary"><i
+                                    class="fas fa-edit"></i></a>
+                            <a href="{% url 'rental_delete' rental.id %}" class="text-danger"
+                                style="margin-left: 0.5rem;"><i class="fas fa-trash"></i></a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-secondary" style="text-align: center;">No rentals recorded</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Expenses Tab -->
+    <div id="expenses" class="tab-content" style="display: none;">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="card-title" style="font-size: 1.1rem; color: var(--text-primary);">Expense History</h3>
+            <a href="{% url 'expense_create' vehicle.id %}" class="btn btn-primary btn-sm">Add Expense</a>
+        </div>
+        <div class="table-container" style="box-shadow: none; padding: 0;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Particulars</th>
+                        <th>Place</th>
+                        <th>Amount</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for expense in expenses %}
+                    <tr>
+                        <td>{{ expense.date }}</td>
+                        <td>{{ expense.particulars }}</td>
+                        <td>{{ expense.place }}</td>
+                        <td class="text-danger">₹{{ expense.amount }}</td>
+                        <td>
+                            <a href="{% url 'expense_edit' expense.id %}" class="text-primary"><i
+                                    class="fas fa-edit"></i></a>
+                            <a href="{% url 'expense_delete' expense.id %}" class="text-danger"
+                                style="margin-left: 0.5rem;"><i class="fas fa-trash"></i></a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-secondary" style="text-align: center;">No expenses recorded</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+    .tab-btn {
+        background: none;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        font-size: 1rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+    }
+
+    .tab-btn.active {
+        color: var(--primary-color);
+        border-bottom-color: var(--primary-color);
+    }
+
+    .tab-btn:hover {
+        color: var(--primary-color);
+    }
+
+    .month-btn-group {
+        flex-wrap: wrap;
+    }
+
+    .month-btn {
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        padding: 0.25rem 0.6rem;
+        font-size: .95rem;
+        font-weight: 400;
+        color: var(--text-primary);
+        border-radius: 0.25rem;
+        cursor: pointer;
+        transition: background .17s, color .17s, border .2s;
+    }
+
+    .month-btn.active-month-btn {
+        background: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
+    }
+
+    .month-btn:not(.active-month-btn):hover {
+        background: #e0e7ef;
+        color: var(--primary-color);
+    }
+
+    .filter-bar .form-select {
+        min-width: 90px;
+        margin-left: .4rem;
+        font-size: .96rem;
+        padding: 0.28rem 1.7rem 0.28rem 0.8rem;
+    }
+
+    .monthly-summary-table {
+        width: 100%;
+        border-spacing: 0;
+        border-collapse: collapse;
+        background: white;
+        margin-bottom: 0.6rem;
+        font-size: 1rem;
+    }
+
+    .monthly-summary-table th,
+    .monthly-summary-table td {
+        border-bottom: 1px solid #e5e7eb;
+        padding: 0.6rem 1.1rem;
+        text-align: left;
+    }
+
+    .monthly-summary-table th {
+        font-size: 0.97rem;
+        color: #888c97;
+        font-weight: 700;
+        background: #f6f7fa;
+    }
+
+    .monthly-summary-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .monthly-summary-table td {
+        vertical-align: middle;
+    }
+</style>
+
+<script>
+    // Month & year selector and filter logic for the summary table
+    document.addEventListener("DOMContentLoaded", function () {
+        // Year select: 2020 to current+2, descending, default current
+        var yearSelect = document.getElementById("year-select");
+        var now = new Date();
+        var thisYear = now.getFullYear();
+        var minYear = 2020;
+        var maxYear = thisYear + 2;
+        for (var y = maxYear; y >= minYear; y--) {
+            var opt = document.createElement("option");
+            opt.value = y;
+            opt.text = y;
+            if (y === thisYear) opt.selected = true;
+            yearSelect.appendChild(opt);
+        }
+        // Month: activate current month by default
+        var month = (now.getMonth() + 1).toString().padStart(2, "0");
+        var monthBtn = document.getElementById("month-btn-" + month);
+        if (monthBtn) monthBtn.classList.add("active-month-btn");
+
+        // Filtering logic for summary table based on current/default
+        filterMonthlySummary(month, thisYear);
+
+        // Year filter change
+        yearSelect.addEventListener("change", function () {
+            // Keep activated month's filter
+            var activeMonthBtn = document.querySelector('.month-btn.active-month-btn');
+            var m = activeMonthBtn ? activeMonthBtn.getAttribute("data-month") : month;
+            filterMonthlySummary(m, this.value);
+        });
+    });
+
+    function selectMonth(btn) {
+        // Remove `.active-month-btn` from all
+        var mb = document.getElementsByClassName("month-btn");
+        for (var i = 0; i < mb.length; i++) mb[i].classList.remove("active-month-btn");
+        btn.classList.add("active-month-btn");
+
+        // Filter summary table
+        var m = btn.getAttribute('data-month');
+        var y = document.getElementById("year-select").value;
+        filterMonthlySummary(m, y);
+    }
+
+    function filterMonthlySummary(month, year) {
+        // Hide all rows except those matching (month, year)
+        var rows = document.querySelectorAll('#monthly-summary-table tbody tr');
+        var found = false;
+
+        // Default values
+        var income = 0;
+        var expense = 0;
+        var profit = 0;
+
+        for (var i = 0; i < rows.length; i++) {
+            var m = rows[i].getAttribute("data-month");
+            var y = rows[i].getAttribute("data-year");
+
+            if (rows[i].getAttribute("data-empty")) {
+                // This is the empty state row
+                rows[i].style.display = found ? "none" : "";
+            } else if (m && y) {
+                // This is a data row
+                if (m === month && y === year.toString()) {
+                    rows[i].style.display = "";
+                    found = true;
+
+                    // Get data
+                    income = parseFloat(rows[i].getAttribute("data-income") || 0);
+                    expense = parseFloat(rows[i].getAttribute("data-expense") || 0);
+                    profit = parseFloat(rows[i].getAttribute("data-profit") || 0);
+                } else {
+                    rows[i].style.display = "none";
+                }
+            }
+        }
+
+        // Show empty state if no data found
+        var emptyRow = document.querySelector('#monthly-summary-table tbody tr[data-empty]');
+        if (emptyRow) {
+            emptyRow.style.display = found ? "none" : "";
+        }
+
+        // Update cards
+        document.getElementById('card-revenue').textContent = '₹' + income.toFixed(2);
+        document.getElementById('card-expense').textContent = '₹' + expense.toFixed(2);
+
+        var profitEl = document.getElementById('card-profit');
+        profitEl.textContent = '₹' + profit.toFixed(2);
+
+        // Update profit color
+        profitEl.className = 'card-value ' + (profit >= 0 ? 'text-success' : 'text-danger');
+    }
+
+    // Keep original tab logic
+    function openTab(evt, tabName) {
+        var i, tabcontent, tablinks;
+        tabcontent = document.getElementsByClassName("tab-content");
+        for (i = 0; i < tabcontent.length; i++) {
+            tabcontent[i].style.display = "none";
+        }
+        tablinks = document.getElementsByClassName("tab-btn");
+        for (i = 0; i < tablinks.length; i++) {
+            tablinks[i].className = tablinks[i].className.replace(" active", "");
+        }
+        document.getElementById(tabName).style.display = "block";
+        evt.currentTarget.className += " active";
+    }
+</script>
+{% endblock %}

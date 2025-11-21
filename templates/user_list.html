@@ -1,0 +1,712 @@
+{% extends 'base.html' %}
+
+{% block title %}Users - Vehicle Manager{% endblock %}
+
+{% block content %}
+<div class="header">
+    <div class="header-content">
+        <div class="header-left">
+            <h1 class="page-title">
+                <i class="fas fa-users-cog"></i>
+                User Management
+            </h1>
+            <p class="page-subtitle">Manage system users and their access levels</p>
+        </div>
+        <div class="header-right">
+            <a href="{% url 'user_create' %}" class="btn btn-primary">
+                <i class="fas fa-user-plus"></i>
+                <span>Add New User</span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon" style="background-color: #6366f1;">
+            <i class="fas fa-users"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value">{{ users|length }}</div>
+            <div class="stat-label">Total Partners</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background-color: #10b981;">
+            <i class="fas fa-user-check"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value">{{ active_count }}</div>
+            <div class="stat-label">Active Partners</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background-color: #ef4444;">
+            <i class="fas fa-user-times"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value">{{ inactive_count }}</div>
+            <div class="stat-label">Inactive Partners</div>
+        </div>
+    </div>
+</div>
+
+<!-- Users Table -->
+<div class="users-container">
+    <div class="table-header">
+        <h2 class="table-title">
+            <i class="fas fa-list"></i>
+            All Users
+        </h2>
+        <div class="table-actions">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchInput" placeholder="Search users..." />
+            </div>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="modern-table">
+            <thead>
+                <tr>
+                    <th>
+                        <div class="th-content">
+                            <i class="fas fa-user"></i>
+                            <span>User</span>
+                        </div>
+                    </th>
+                    <th>
+                        <div class="th-content">
+                            <i class="fas fa-envelope"></i>
+                            <span>Email</span>
+                        </div>
+                    </th>
+                    <th>
+                        <div class="th-content">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Role</span>
+                        </div>
+                    </th>
+                    <th>
+                        <div class="th-content">
+                            <i class="fas fa-toggle-on"></i>
+                            <span>Status</span>
+                        </div>
+                    </th>
+                    <th>
+                        <div class="th-content">
+                            <i class="fas fa-calendar"></i>
+                            <span>Joined</span>
+                        </div>
+                    </th>
+                    <th>
+                        <div class="th-content">
+                            <i class="fas fa-cog"></i>
+                            <span>Actions</span>
+                        </div>
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="userTableBody">
+                {% for user in users %}
+                <tr class="user-row" data-username="{{ user.username|lower }}" data-email="{{ user.email|lower }}"
+                    data-name="{{ user.get_full_name|lower }}">
+                    <td>
+                        <a href="{% url 'user_detail' user.pk %}" class="user-info-link">
+                            <div class="user-info">
+                                <div class="user-avatar">
+                                    <i class="fas fa-user"></i>
+                                </div>
+                                <div class="user-details">
+                                    <div class="user-name">{{ user.get_full_name|default:user.username }}</div>
+                                    <div class="user-username">@{{ user.username }}</div>
+                                </div>
+                            </div>
+                        </a>
+                    </td>
+                    <td>
+                        <div class="email-cell">
+                            <i class="fas fa-envelope email-icon"></i>
+                            <span>{{ user.email|default:"No email" }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge badge-partner">
+                            <i class="fas fa-handshake"></i>
+                            Partner
+                        </span>
+                    </td>
+                    <td>
+                        {% if user.is_active %}
+                        <span class="status-badge status-active">
+                            <span class="status-dot"></span>
+                            Active
+                        </span>
+                        {% else %}
+                        <span class="status-badge status-inactive">
+                            <span class="status-dot"></span>
+                            Inactive
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="date-cell">
+                            <i class="fas fa-calendar-alt"></i>
+                            <span>{{ user.date_joined|date:"M d, Y" }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="action-buttons">
+                            <a href="{% url 'user_edit' user.pk %}" class="action-btn edit-btn" title="Edit User">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <a href="{% url 'user_delete' user.pk %}" class="action-btn delete-btn" title="Delete User">
+                                <i class="fas fa-trash-alt"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="empty-state">
+                        <div class="empty-content">
+                            <i class="fas fa-users"></i>
+                            <h3>No Users Found</h3>
+                            <p>Get started by adding your first user</p>
+                            <a href="{% url 'user_create' %}" class="btn btn-primary">
+                                <i class="fas fa-user-plus"></i>
+                                Add First User
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    /* Header Styles */
+    .header-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .header-left {
+        flex: 1;
+        min-width: 250px;
+    }
+
+    .page-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 1.875rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0 0 0.5rem 0;
+    }
+
+    .page-title i {
+        color: var(--primary-color);
+    }
+
+    .page-subtitle {
+        color: #6b7280;
+        font-size: 0.95rem;
+        margin: 0;
+    }
+
+    .header-right {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        border: 1px solid #f3f4f6;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+    }
+
+    .stat-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.5rem;
+        flex-shrink: 0;
+    }
+
+    .stat-content {
+        flex: 1;
+    }
+
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+        font-weight: 500;
+    }
+
+    /* Users Container */
+    .users-container {
+        background: white;
+        border-radius: 1rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        border: 1px solid #f3f4f6;
+    }
+
+    .table-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid #f3f4f6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .table-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .table-title i {
+        color: var(--primary-color);
+    }
+
+    .search-box {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .search-box i {
+        position: absolute;
+        left: 1rem;
+        color: #9ca3af;
+        font-size: 0.875rem;
+    }
+
+    .search-box input {
+        padding: 0.625rem 1rem 0.625rem 2.5rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.5rem;
+        font-size: 0.875rem;
+        width: 280px;
+        transition: all 0.2s;
+    }
+
+    .search-box input:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    /* Modern Table */
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    .modern-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .modern-table thead {
+        background: #f9fafb;
+    }
+
+    .modern-table th {
+        padding: 1rem 1.5rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #6b7280;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .th-content {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .th-content i {
+        font-size: 0.875rem;
+    }
+
+    .modern-table tbody tr {
+        border-bottom: 1px solid #f3f4f6;
+        transition: all 0.2s;
+    }
+
+    .modern-table tbody tr:hover {
+        background: #f9fafb;
+    }
+
+    .modern-table td {
+        padding: 1.25rem 1.5rem;
+        color: var(--text-primary);
+    }
+
+    /* User Info Cell */
+    .user-info-link {
+        text-decoration: none;
+        color: inherit;
+        display: block;
+    }
+
+    .user-info-link:hover .user-name {
+        color: var(--primary-color);
+    }
+
+    .user-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .user-avatar {
+        width: 45px;
+        height: 45px;
+        border-radius: 50%;
+        background-color: #6366f1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+
+    .user-details {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .user-name {
+        font-weight: 600;
+        color: var(--text-primary);
+        font-size: 0.95rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition: color 0.2s;
+    }
+
+    .user-username {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-top: 0.125rem;
+    }
+
+    /* Email Cell */
+    .email-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: #6b7280;
+    }
+
+    .email-icon {
+        color: #9ca3af;
+        font-size: 0.875rem;
+    }
+
+    /* Date Cell */
+    .date-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: #6b7280;
+        font-size: 0.875rem;
+    }
+
+    .date-cell i {
+        color: #9ca3af;
+    }
+
+    /* Badges */
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.375rem 0.875rem;
+        border-radius: 2rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .badge-admin {
+        background-color: #6366f1;
+        color: white;
+    }
+
+    .badge-partner {
+        background-color: #06b6d4;
+        color: white;
+    }
+
+    .badge i {
+        font-size: 0.75rem;
+    }
+
+    /* Status Badge */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.375rem 0.875rem;
+        border-radius: 2rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+    }
+
+    .status-active {
+        background: #d1fae5;
+        color: #065f46;
+    }
+
+    .status-inactive {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+
+    .status-active .status-dot {
+        background: #10b981;
+    }
+
+    .status-inactive .status-dot {
+        background: #ef4444;
+    }
+
+    @keyframes pulse {
+
+        0%,
+        100% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: 0.5;
+        }
+    }
+
+    /* Action Buttons */
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: center;
+    }
+
+    .action-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        text-decoration: none;
+        border: 1px solid #e5e7eb;
+        background: white;
+    }
+
+    .edit-btn {
+        color: #3b82f6;
+    }
+
+    .edit-btn:hover {
+        background: #3b82f6;
+        color: white;
+        border-color: #3b82f6;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .delete-btn {
+        color: #ef4444;
+    }
+
+    .delete-btn:hover {
+        background: #ef4444;
+        color: white;
+        border-color: #ef4444;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+    }
+
+    /* Empty State */
+    .empty-state {
+        padding: 4rem 2rem !important;
+    }
+
+    .empty-content {
+        text-align: center;
+    }
+
+    .empty-content i {
+        font-size: 4rem;
+        color: #d1d5db;
+        margin-bottom: 1rem;
+    }
+
+    .empty-content h3 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0 0 0.5rem 0;
+    }
+
+    .empty-content p {
+        color: #6b7280;
+        margin: 0 0 1.5rem 0;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 1024px) {
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 768px) {
+        .header-content {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .header-right {
+            width: 100%;
+        }
+
+        .header-right .btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .table-header {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .search-box input {
+            width: 100%;
+        }
+
+        .modern-table {
+            font-size: 0.875rem;
+        }
+
+        .modern-table th,
+        .modern-table td {
+            padding: 0.875rem 1rem;
+        }
+
+        .user-avatar {
+            width: 38px;
+            height: 38px;
+            font-size: 1rem;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+        }
+    }
+
+    @media (max-width: 640px) {
+
+        /* Hide less important columns on mobile */
+        .modern-table th:nth-child(5),
+        .modern-table td:nth-child(5) {
+            display: none;
+        }
+
+        .action-buttons {
+            flex-direction: column;
+        }
+    }
+</style>
+
+<script>
+    // Search functionality
+    document.getElementById('searchInput').addEventListener('keyup', function () {
+        const searchTerm = this.value.toLowerCase();
+        const rows = document.querySelectorAll('.user-row');
+
+        rows.forEach(row => {
+            const username = row.dataset.username || '';
+            const email = row.dataset.email || '';
+            const name = row.dataset.name || '';
+
+            if (username.includes(searchTerm) || email.includes(searchTerm) || name.includes(searchTerm)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    });
+</script>
+{% endblock %}

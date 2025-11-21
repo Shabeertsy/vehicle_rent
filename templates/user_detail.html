@@ -1,0 +1,395 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ user_obj.get_full_name|default:user_obj.username }} - User Details{% endblock %}
+
+{% block content %}
+<div class="header">
+    <div class="header-content">
+        <div class="header-left">
+            <h1 class="page-title">
+                <i class="fas fa-user-circle"></i>
+                {{ user_obj.get_full_name|default:user_obj.username }}
+            </h1>
+            <p class="page-subtitle">@{{ user_obj.username }} • {{ user_obj.email|default:"No email" }}</p>
+        </div>
+        <div class="header-right">
+            <a href="{% url 'user_list' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i>
+                <span>Back to Users</span>
+            </a>
+            <a href="{% url 'user_edit' user_obj.pk %}" class="btn btn-primary">
+                <i class="fas fa-edit"></i>
+                <span>Edit User</span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon" style="background-color: #10b981;">
+            <i class="fas fa-dollar-sign"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value">₹{{ total_income|floatformat:2 }}</div>
+            <div class="stat-label">Total Income ({{ selected_year }})</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background-color: #ef4444;">
+            <i class="fas fa-receipt"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value">₹{{ total_expense|floatformat:2 }}</div>
+            <div class="stat-label">Total Expenses ({{ selected_year }})</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background-color: {% if profit >= 0 %}#10b981{% else %}#ef4444{% endif %};">
+            <i class="fas fa-chart-line"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value {% if profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+                ₹{{ profit|floatformat:2 }}
+            </div>
+            <div class="stat-label">Net Balance ({{ selected_year }})</div>
+        </div>
+    </div>
+</div>
+
+<!-- Year Filter -->
+<div class="filter-container">
+    <form method="get" class="filter-form">
+        <label for="year-filter">
+            <i class="fas fa-calendar-alt"></i>
+            Filter by Year:
+        </label>
+        <select name="year" id="year-filter" onchange="this.form.submit()">
+            {% for year in available_years %}
+            <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>{{ year }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<!-- Monthly Breakdown Table -->
+<div class="table-container">
+    <div class="table-header">
+        <h2 class="table-title">
+            <i class="fas fa-calendar-check"></i>
+            Monthly Breakdown - {{ selected_year }}
+        </h2>
+    </div>
+
+    <div class="table-responsive">
+        <table class="modern-table">
+            <thead>
+                <tr>
+                    <th>Month</th>
+                    <th>Income</th>
+                    <th>Expenses</th>
+                    <th>Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for data in monthly_data %}
+                <tr>
+                    <td><strong>{{ data.month }}</strong></td>
+                    <td class="text-success">₹{{ data.income|floatformat:2 }}</td>
+                    <td class="text-danger">₹{{ data.expense|floatformat:2 }}</td>
+                    <td class="{% if data.profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        <strong>₹{{ data.profit|floatformat:2 }}</strong>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="empty-state">
+                        <div class="empty-content">
+                            <i class="fas fa-calendar-times"></i>
+                            <h3>No Data for {{ selected_year }}</h3>
+                            <p>This user has no recorded income or expenses for this year.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    /* Header Styles */
+    .header-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .header-left {
+        flex: 1;
+        min-width: 250px;
+    }
+
+    .page-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 1.875rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0 0 0.5rem 0;
+    }
+
+    .page-title i {
+        color: var(--primary-color);
+    }
+
+    .page-subtitle {
+        color: #6b7280;
+        font-size: 0.95rem;
+        margin: 0;
+    }
+
+    .header-right {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        border: 1px solid #f3f4f6;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+    }
+
+    .stat-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.5rem;
+        flex-shrink: 0;
+    }
+
+    .stat-content {
+        flex: 1;
+    }
+
+    .stat-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+        font-weight: 500;
+    }
+
+    /* Filter Container */
+    .filter-container {
+        background: white;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border: 1px solid #f3f4f6;
+    }
+
+    .filter-form {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .filter-form label {
+        font-weight: 600;
+        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .filter-form label i {
+        color: var(--primary-color);
+    }
+
+    .filter-form select {
+        padding: 0.625rem 1rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.5rem;
+        font-size: 0.9375rem;
+        background: white;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .filter-form select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
+    }
+
+    /* Table Container */
+    .table-container {
+        background: white;
+        border-radius: 1rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        border: 1px solid #f3f4f6;
+    }
+
+    .table-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .table-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .table-title i {
+        color: var(--primary-color);
+    }
+
+    /* Modern Table */
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    .modern-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .modern-table thead {
+        background: #f9fafb;
+    }
+
+    .modern-table th {
+        padding: 1rem 1.5rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #6b7280;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .modern-table tbody tr {
+        border-bottom: 1px solid #f3f4f6;
+        transition: all 0.2s;
+    }
+
+    .modern-table tbody tr:hover {
+        background: #f9fafb;
+    }
+
+    .modern-table td {
+        padding: 1.25rem 1.5rem;
+        color: var(--text-primary);
+    }
+
+    /* Empty State */
+    .empty-state {
+        padding: 4rem 2rem !important;
+    }
+
+    .empty-content {
+        text-align: center;
+    }
+
+    .empty-content i {
+        font-size: 4rem;
+        color: #d1d5db;
+        margin-bottom: 1rem;
+    }
+
+    .empty-content h3 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0 0 0.5rem 0;
+    }
+
+    .empty-content p {
+        color: #6b7280;
+        margin: 0;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+        .header-content {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .header-right {
+            width: 100%;
+            flex-direction: column;
+        }
+
+        .header-right .btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .filter-form {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .filter-form select {
+            width: 100%;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+        }
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}Import Data - Vehicle Manager{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1 class="page-title">Import Data</h1>
+</div>
+
+<div class="card" style="max-width: 600px; margin: 0 auto;">
+    <h2 class="card-title" style="font-size: 1.25rem; margin-bottom: 1rem; color: var(--text-primary);">
+        Upload Excel File
+    </h2>
+
+    <p class="text-secondary" style="margin-bottom: 2rem;">
+        Upload an Excel file (.xlsx) containing rental data. Please ensure the columns match the required format.
+    </p>
+
+    <div class="alert alert-info"
+        style="background:#eff6ff;color:#1e40af;padding:1rem;border-radius:.5rem;margin-bottom:2rem;font-size:.875rem;">
+        <strong>Expected Columns:</strong><br>
+        DATE OUT, TIME OUT, DATE IN, TIME IN, CUSTOMER, CONTACT NO, CUSTOMER ID, C/O, DESTINATION,
+        DAYS OF RENT, RENT/DAY, ADV AMOUNT, STARTING KM, ENDING KM, TOTAL AMOUNT RECEIVED
+    </div>
+
+    {% if messages %}
+    <div class="mb-4">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" autocomplete="off">
+        {% csrf_token %}
+
+        <!-- Vehicle selector -->
+        <div class="form-group mb-3">
+            <label class="form-label" for="vehicle_id_select">Select Vehicle</label>
+            <select id="vehicle_id_select" name="vehicle_id" class="form-control" required>
+                <option value="">-- Select Vehicle --</option>
+                {% for vehicle in vehicles %}
+                <option value="{{ vehicle.id }}"
+                    {% if vehicle.id|stringformat:"s" == selected_vehicle_id|stringformat:"s" %}selected{% endif %}>
+                    {{ vehicle.name }} - {{ vehicle.registration_number }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- File input -->
+        <div class="form-group mb-3">
+            <label class="form-label" for="excel_file_input">Excel File</label>
+            <input id="excel_file_input" type="file" name="excel_file" class="form-control" accept=".xlsx,.xls" required>
+        </div>
+
+        {% if import_errors %}
+        <div class="alert alert-danger" style="margin-bottom:1rem;">
+            <strong>Import Error:</strong>
+            <ul style="margin-bottom:0;.padding-left: 1.2rem;">
+                {% for error in import_errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <!-- Buttons -->
+        <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn btn-primary">Upload & Import</button>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

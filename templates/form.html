@@ -1,0 +1,515 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - Vehicle Manager{% endblock %}
+
+{% block content %}
+<div class="form-page-container">
+    <div class="form-header">
+        <div class="form-header-content">
+            <a href="javascript:history.back()" class="back-button">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <div class="form-header-text">
+                <h1 class="form-title">{{ title }}</h1>
+                <p class="form-subtitle">Fill in the details below</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-card">
+        <form method="post" enctype="multipart/form-data" class="modern-form">
+            {% csrf_token %}
+
+            <div class="form-grid">
+                {% for field in form %}
+                <div
+                    class="form-field {% if field.field.widget.input_type == 'checkbox' %}checkbox-field{% endif %} {% if field.name == 'password1' or field.name == 'password2' %}full-width{% endif %}">
+                    {% if field.field.widget.input_type == 'checkbox' %}
+                    <div class="checkbox-container">
+                        <label class="checkbox-wrapper">
+                            {{ field }}
+                            <span class="checkbox-label">{{ field.label }}</span>
+                            <span class="checkmark"></span>
+                        </label>
+                        {% if field.help_text %}
+                        <small class="field-help">{{ field.help_text }}</small>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <label class="field-label" for="{{ field.id_for_label }}">
+                        {{ field.label }}
+                        {% if field.field.required %}
+                        <span class="required-mark">*</span>
+                        {% endif %}
+                    </label>
+                    <div class="input-wrapper">
+                        {{ field }}
+                        {% if field.name == 'email' %}
+                        <i class="input-icon fas fa-envelope"></i>
+                        {% elif field.name == 'username' %}
+                        <i class="input-icon fas fa-user"></i>
+                        {% elif field.name == 'password1' or field.name == 'password2' %}
+                        <i class="input-icon fas fa-lock"></i>
+                        {% elif field.name == 'first_name' or field.name == 'last_name' %}
+                        <i class="input-icon fas fa-id-card"></i>
+                        {% endif %}
+                    </div>
+                    {% if field.help_text %}
+                    <small class="field-help">{{ field.help_text }}</small>
+                    {% endif %}
+                    {% endif %}
+                    {% if field.errors %}
+                    <div class="field-errors">
+                        {% for error in field.errors %}
+                        <div class="error-message">
+                            <i class="fas fa-exclamation-circle"></i>
+                            {{ error }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-large">
+                    <i class="fas fa-save"></i>
+                    <span>Save Changes</span>
+                </button>
+                <a href="javascript:history.back()" class="btn btn-secondary btn-large">
+                    <i class="fas fa-times"></i>
+                    <span>Cancel</span>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    /* Form Page Container */
+    .form-page-container {
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    /* Form Header */
+    .form-header {
+        margin-bottom: 2rem;
+    }
+
+    .form-header-content {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+    }
+
+    .back-button {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6b7280;
+        text-decoration: none;
+        transition: all 0.2s;
+        flex-shrink: 0;
+    }
+
+    .back-button:hover {
+        background: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
+        transform: translateX(-4px);
+    }
+
+    .form-header-text {
+        flex: 1;
+    }
+
+    .form-title {
+        font-size: 1.875rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0 0 0.25rem 0;
+    }
+
+    .form-subtitle {
+        color: #6b7280;
+        margin: 0;
+        font-size: 0.95rem;
+    }
+
+    /* Form Card */
+    .form-card {
+        background: white;
+        border-radius: 1rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border: 1px solid #f3f4f6;
+        padding: 2rem;
+    }
+
+    /* Modern Form */
+    .modern-form {
+        width: 100%;
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .form-field {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .form-field.full-width {
+        grid-column: 1 / -1;
+    }
+
+    .form-field.checkbox-field {
+        grid-column: 1 / -1;
+    }
+
+    /* Field Label */
+    .field-label {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .required-mark {
+        color: #ef4444;
+        font-weight: 700;
+    }
+
+    /* Input Wrapper */
+    .input-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .input-icon {
+        position: absolute;
+        left: 1rem;
+        color: #9ca3af;
+        font-size: 0.875rem;
+        pointer-events: none;
+    }
+
+    /* Input Styles */
+    input[type="text"],
+    input[type="number"],
+    input[type="email"],
+    input[type="password"],
+    input[type="date"],
+    input[type="time"],
+    input[type="file"],
+    select,
+    textarea {
+        width: 100%;
+        padding: 0.875rem 1rem;
+        border-radius: 0.75rem;
+        border: 1px solid #e5e7eb;
+        font-size: 0.9375rem;
+        transition: all 0.2s;
+        background-color: #fff;
+        color: var(--text-primary);
+        font-family: inherit;
+    }
+
+    /* Add padding for inputs with icons */
+    .input-wrapper input[type="text"],
+    .input-wrapper input[type="email"],
+    .input-wrapper input[type="password"] {
+        padding-left: 2.75rem;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+    }
+
+    select {
+        cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        background-size: 1.25rem;
+        padding-right: 2.5rem;
+    }
+
+    textarea {
+        min-height: 120px;
+        resize: vertical;
+    }
+
+    /* Field Help Text */
+    .field-help {
+        display: block;
+        margin-top: 0.5rem;
+        font-size: 0.8125rem;
+        color: #6b7280;
+        line-height: 1.4;
+    }
+
+    /* Checkbox Styles */
+    .checkbox-field {
+        background: #f9fafb;
+        padding: 1rem;
+        border-radius: 0.75rem;
+        border: 1px solid #e5e7eb;
+    }
+
+    .checkbox-container {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .checkbox-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        cursor: pointer;
+        position: relative;
+        padding-left: 2rem;
+        user-select: none;
+    }
+
+    .checkbox-wrapper input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+        cursor: pointer;
+        height: 0;
+        width: 0;
+    }
+
+    .checkmark {
+        position: absolute;
+        left: 0;
+        height: 22px;
+        width: 22px;
+        background-color: white;
+        border: 2px solid #d1d5db;
+        border-radius: 0.375rem;
+        transition: all 0.2s;
+    }
+
+    .checkbox-wrapper:hover input~.checkmark {
+        border-color: var(--primary-color);
+    }
+
+    .checkbox-wrapper input:checked~.checkmark {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+    }
+
+    .checkmark:after {
+        content: "";
+        position: absolute;
+        display: none;
+        left: 6px;
+        top: 2px;
+        width: 5px;
+        height: 10px;
+        border: solid white;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+    }
+
+    .checkbox-wrapper input:checked~.checkmark:after {
+        display: block;
+    }
+
+    .checkbox-label {
+        font-weight: 600;
+        color: var(--text-primary);
+        font-size: 0.9375rem;
+    }
+
+    .checkbox-field .field-help {
+        margin-left: 2rem;
+        margin-top: 0.25rem;
+    }
+
+    /* Error Messages */
+    .field-errors {
+        margin-top: 0.5rem;
+    }
+
+    .error-message {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 0.5rem;
+        color: #991b1b;
+        font-size: 0.8125rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .error-message:last-child {
+        margin-bottom: 0;
+    }
+
+    .error-message i {
+        color: #ef4444;
+    }
+
+    /* Form Actions */
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid #f3f4f6;
+    }
+
+    .btn-large {
+        padding: 0.875rem 2rem;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 0.75rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.625rem;
+        transition: all 0.2s;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+        justify-content: center;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, var(--primary-color) 0%, #4f46e5 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4);
+    }
+
+    .btn-secondary {
+        background: white;
+        color: #6b7280;
+        border: 1px solid #e5e7eb;
+    }
+
+    .btn-secondary:hover {
+        background: #f9fafb;
+        border-color: #d1d5db;
+    }
+
+    /* Password field styling */
+    input[type="password"] {
+        font-family: 'Courier New', monospace;
+        letter-spacing: 0.1em;
+    }
+
+    /* File input styling */
+    input[type="file"] {
+        padding: 0.75rem;
+        cursor: pointer;
+    }
+
+    input[type="file"]::file-selector-button {
+        padding: 0.5rem 1rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.5rem;
+        background: #f9fafb;
+        color: var(--text-primary);
+        cursor: pointer;
+        margin-right: 1rem;
+        transition: all 0.2s;
+    }
+
+    input[type="file"]::file-selector-button:hover {
+        background: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+        .form-card {
+            padding: 1.5rem;
+        }
+
+        .form-grid {
+            grid-template-columns: 1fr;
+            gap: 1.25rem;
+        }
+
+        .form-field.full-width {
+            grid-column: 1;
+        }
+
+        .form-title {
+            font-size: 1.5rem;
+        }
+
+        .form-actions {
+            flex-direction: column;
+        }
+
+        .btn-large {
+            width: 100%;
+        }
+
+        .back-button {
+            width: 42px;
+            height: 42px;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .form-card {
+            padding: 1.25rem;
+            border-radius: 0.75rem;
+        }
+
+        .form-header-content {
+            gap: 1rem;
+        }
+
+        .form-title {
+            font-size: 1.25rem;
+        }
+
+        .form-subtitle {
+            font-size: 0.875rem;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="email"],
+        input[type="password"],
+        input[type="date"],
+        input[type="time"],
+        select,
+        textarea {
+            font-size: 16px;
+            /* Prevents zoom on iOS */
+        }
+    }
+</style>
+{% endblock %}

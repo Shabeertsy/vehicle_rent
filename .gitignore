@@ -1,0 +1,48 @@
+# Django #
+*.log
+*.pot
+*.pyc
+__pycache__/
+db.sqlite3
+instance/
+.webassets-cache
+
+# If your project includes media files and you don't want them tracked
+/media
+
+# Django migrations
+*/migrations/*.py
+*/migrations/*.pyc
+!*/migrations/__init__.py
+
+# IDEs and editors #
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# OS generated files #
+.DS_Store
+Thumbs.db
+
+# Env files #
+.env
+.env.*
+
+# Python virtualenv #
+venv/
+ENV/
+env/
+.venv/
+
+# Coverage reports
+htmlcov/
+.coverage
+.tox/
+coverage.xml
+nosetests.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+# End Generation Here
+```

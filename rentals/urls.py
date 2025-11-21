@@ -1,0 +1,34 @@
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('', views.dashboard, name='dashboard'),
+    
+    # Vehicle URLs
+    path('vehicles/', views.vehicle_list, name='vehicle_list'),
+    path('vehicles/add/', views.vehicle_create, name='vehicle_create'),
+    path('vehicles/<int:pk>/', views.vehicle_detail, name='vehicle_detail'),
+    path('vehicles/<int:pk>/edit/', views.vehicle_edit, name='vehicle_edit'),
+    path('vehicles/<int:pk>/delete/', views.vehicle_delete, name='vehicle_delete'),
+    
+    # Rental URLs
+    path('vehicles/<int:vehicle_id>/rentals/add/', views.rental_create, name='rental_create'),
+    path('rentals/<int:pk>/edit/', views.rental_edit, name='rental_edit'),
+    path('rentals/<int:pk>/delete/', views.rental_delete, name='rental_delete'),
+    
+    # Expense URLs
+    path('vehicles/<int:vehicle_id>/expenses/add/', views.expense_create, name='expense_create'),
+    path('expenses/<int:pk>/edit/', views.expense_edit, name='expense_edit'),
+    path('expenses/<int:pk>/delete/', views.expense_delete, name='expense_delete'),
+    
+    # Import
+    path('import/', views.import_data, name='import_data'),
+    
+    # User Management URLs
+    path('users/', views.user_list, name='user_list'),
+    path('users/add/', views.user_create, name='user_create'),
+    path('users/<int:pk>/', views.user_detail, name='user_detail'),
+    path('users/<int:pk>/edit/', views.user_edit, name='user_edit'),
+    path('users/<int:pk>/delete/', views.user_delete, name='user_delete'),
+]
+
