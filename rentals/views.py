@@ -4,7 +4,10 @@ from django.db.models.functions import TruncMonth
 from django.contrib import messages
 from django.utils import timezone
 from django.contrib.auth.models import User
-from .models import Vehicle, Rental, Expense
+from django.contrib.auth.models import User
+from django.views.decorators.http import require_POST
+from decimal import Decimal
+from .models import Vehicle, Rental, Expense, UserProfile, TakenAmount
 from .forms import VehicleForm, RentalForm, ExpenseForm, UserCreateForm, UserEditForm
 import pandas as pd
 from datetime import datetime, date
@@ -19,13 +22,13 @@ def dashboard(request):
     # Monthly Data for Graph and Table
     # Group rentals by month
     rentals_by_month = Rental.objects.annotate(month=TruncMonth('date_out')).values('month').annotate(income=Sum('total_amount_received')).order_by('month')
-    
+
     # Group expenses by month
     expenses_by_month = Expense.objects.annotate(month=TruncMonth('date')).values('month').annotate(expense=Sum('amount')).order_by('month')
 
     # Merge data
     monthly_data = {}
-    
+
     for r in rentals_by_month:
         month = r['month'].strftime('%B %Y')
         if month not in monthly_data:
@@ -43,7 +46,7 @@ def dashboard(request):
     for month, data in monthly_data.items():
         data['profit'] = data['income'] - data['expense']
         final_monthly_data.append(data)
-    
+
     # Sort by date (parsing the month string back to date for sorting)
     final_monthly_data.sort(key=lambda x: datetime.strptime(x['month'], '%B %Y'))
 
@@ -65,11 +68,11 @@ def vehicle_detail(request, pk):
     vehicle = get_object_or_404(Vehicle, pk=pk)
     rentals = vehicle.rentals.all().order_by('-date_out')
     expenses = vehicle.expenses.all().order_by('-date')
-    
+
     total_revenue = rentals.aggregate(Sum('total_amount_received'))['total_amount_received__sum'] or 0
     total_expense = expenses.aggregate(Sum('amount'))['amount__sum'] or 0
     profit = total_revenue - total_expense
-    
+
     # Monthly breakdown for this vehicle (income, expense, profit per month) including all months
     # Rentals grouped by month
     rentals_by_month = rentals.annotate(month=TruncMonth('date_out')).values('month').annotate(income=Sum('total_amount_received')).order_by('month')
@@ -114,21 +117,70 @@ def vehicle_detail(request, pk):
         profit_val = income - expense
         monthly_data.append({
             'month': month_dt,  # Pass the date object directly
-            'income': income, 
-            'expense': expense, 
+            'income': income,
+            'expense': expense,
             'profit': profit_val
         })
 
     # Pass months (as list of date objects) to the front end, so template can access all months explicitly.
+
+    # Check EMI status
+    emi_warning = False
+    emi_due_date = None
+    emi_is_paid = False
+    days_until_emi = None
+
+    try:
+        emi_config = vehicle.emi
+        if emi_config.is_active:
+            today = date.today()
+
+            # Calculate due date for this month
+            try:
+                due_date = date(today.year, today.month, emi_config.due_day)
+            except ValueError:
+                # Handle months with fewer days (e.g., Feb 30 -> Feb 28/29)
+                import calendar
+                last_day = calendar.monthrange(today.year, today.month)[1]
+                due_date = date(today.year, today.month, last_day)
+
+            emi_due_date = due_date
+
+            # Check if paid using EMIPayment model
+            from .models import EMIPayment
+            emi_is_paid = EMIPayment.objects.filter(
+                vehicle=vehicle,
+                date__year=today.year,
+                date__month=today.month
+            ).exists()
+
+            if not emi_is_paid:
+                days_until_emi = (due_date - today).days
+                if days_until_emi <= emi_config.warning_days:
+                    emi_warning = True
+    except Exception:
+        # No EMI configured for this vehicle or other error
+        emi_config = None
+
+    # Get EMI history
+    from .models import EMIPayment
+    emi_payments = EMIPayment.objects.filter(vehicle=vehicle).order_by('-date')
+
     context = {
         'vehicle': vehicle,
         'rentals': rentals,
         'expenses': expenses,
+        'emi_payments': emi_payments,  # Add this line
         'total_revenue': total_revenue,
         'total_expense': total_expense,
         'profit': profit,
         'monthly_data': monthly_data,
         'all_months': months,   # <<<This is the additional context variable
+        'emi_warning': emi_warning,
+        'emi_due_date': emi_due_date,
+        'emi_is_paid': emi_is_paid,
+        'emi_config': emi_config,
+        'days_until_emi': days_until_emi,
     }
     return render(request, 'vehicle_detail.html', context)
 
@@ -136,24 +188,53 @@ def vehicle_create(request):
     if request.method == 'POST':
         form = VehicleForm(request.POST, request.FILES)
         if form.is_valid():
-            form.save()
+            vehicle = form.save()
+
+            # Handle partners manually from POST data
+            partner_ids = request.POST.getlist('partners')
+            if partner_ids:
+                partners = User.objects.filter(pk__in=partner_ids, is_active=True)
+                vehicle.partners.set(partners)
+            else:
+                vehicle.partners.clear()
+
             messages.success(request, 'Vehicle created successfully.')
             return redirect('vehicle_list')
     else:
         form = VehicleForm()
-    return render(request, 'form.html', {'form': form, 'title': 'Add Vehicle'})
+
+    partners = User.objects.filter(is_active=True).order_by('username')
+    return render(request, 'form.html', {'form': form, 'title': 'Add Vehicle', 'partners': partners})
 
 def vehicle_edit(request, pk):
     vehicle = get_object_or_404(Vehicle, pk=pk)
     if request.method == 'POST':
         form = VehicleForm(request.POST, request.FILES, instance=vehicle)
         if form.is_valid():
-            form.save()
+            vehicle = form.save()
+
+            # Handle partners manually from POST data
+            partner_ids = request.POST.getlist('partners')
+            if partner_ids:
+                partners = User.objects.filter(pk__in=partner_ids, is_active=True)
+                vehicle.partners.set(partners)
+            else:
+                vehicle.partners.clear()
+
             messages.success(request, 'Vehicle updated successfully.')
             return redirect('vehicle_detail', pk=pk)
     else:
         form = VehicleForm(instance=vehicle)
-    return render(request, 'form.html', {'form': form, 'title': 'Edit Vehicle'})
+
+    partners = User.objects.filter(is_active=True).order_by('username')
+    selected_partners = vehicle.partners.all()
+    return render(request, 'form.html', {
+        'form': form,
+        'title': 'Edit Vehicle',
+        'partners': partners,
+        'selected_partners': selected_partners,
+        'vehicle': vehicle
+    })
 
 def vehicle_delete(request, pk):
     vehicle = get_object_or_404(Vehicle, pk=pk)
@@ -172,10 +253,22 @@ def rental_create(request, vehicle_id):
             rental = form.save(commit=False)
             rental.vehicle = vehicle
             rental.save()
+
+            # Send email notification to partners
+            from .notifications import send_partner_notification
+            send_partner_notification(vehicle, 'rental', {
+                'customer_name': rental.customer_name,
+                'date_out': rental.date_out,
+                'destination': rental.destination or 'N/A',
+                'days_of_rent': rental.days_of_rent,
+                'total_amount_received': rental.total_amount_received,
+            })
+
             messages.success(request, 'Rental added successfully.')
             return redirect('vehicle_detail', pk=vehicle_id)
     else:
-        form = RentalForm()
+        initial_data = {'rent_per_day': vehicle.price_per_day}
+        form = RentalForm(initial=initial_data)
     return render(request, 'form.html', {'form': form, 'title': f'Add Rental for {vehicle.name}'})
 
 def rental_edit(request, pk):
@@ -208,6 +301,16 @@ def expense_create(request, vehicle_id):
             expense = form.save(commit=False)
             expense.vehicle = vehicle
             expense.save()
+
+            # Send email notification to partners
+            from .notifications import send_partner_notification
+            send_partner_notification(vehicle, 'expense', {
+                'date': expense.date,
+                'particulars': expense.particulars,
+                'place': expense.place or 'N/A',
+                'amount': expense.amount,
+            })
+
             messages.success(request, 'Expense added successfully.')
             return redirect('vehicle_detail', pk=vehicle_id)
     else:
@@ -457,7 +560,7 @@ def user_list(request):
     users = User.objects.all().order_by('-date_joined')
     active_count = users.filter(is_active=True).count()
     inactive_count = users.filter(is_active=False).count()
-    
+
     context = {
         'users': users,
         'active_count': active_count,
@@ -467,7 +570,7 @@ def user_list(request):
 
 def user_detail(request, pk):
     user = get_object_or_404(User, pk=pk)
-    
+
     # Get filter year, default to current year
     current_year = datetime.now().year
     selected_year = request.GET.get('year', current_year)
@@ -476,48 +579,144 @@ def user_detail(request, pk):
     except ValueError:
         selected_year = current_year
 
-    # Filter rentals and expenses by user and year
+    # Filter rentals and expenses by user and year (for context, though not used in monthly breakdown)
     rentals = Rental.objects.filter(user=user, date_out__year=selected_year).order_by('-date_out')
     expenses = Expense.objects.filter(user=user, date__year=selected_year).order_by('-date')
 
-    # Calculate totals for the selected year
-    total_income = rentals.aggregate(Sum('total_amount_received'))['total_amount_received__sum'] or 0
-    total_expense = expenses.aggregate(Sum('amount'))['amount__sum'] or 0
-    profit = total_income - total_expense
+    # Calculate totals for the selected year (based on profit sharing)
+    total_income = 0
+    total_expense = 0
+    profit = 0
 
-    # Monthly breakdown
-    monthly_data = {}
-    
-    # Process rentals
-    rentals_by_month = rentals.annotate(month=TruncMonth('date_out')).values('month').annotate(income=Sum('total_amount_received')).order_by('month')
-    for r in rentals_by_month:
-        month_name = r['month'].strftime('%B')
-        if month_name not in monthly_data:
-            monthly_data[month_name] = {'month': month_name, 'income': 0, 'expense': 0}
-        monthly_data[month_name]['income'] = float(r['income'])
+    # Monthly breakdown data structures (using month numbers 1-12 as keys)
+    monthly_shares = {}  # For income/expense from vehicles
+    monthly_taken = {}   # For taken amounts
 
-    # Process expenses
-    expenses_by_month = expenses.annotate(month=TruncMonth('date')).values('month').annotate(expense=Sum('amount')).order_by('month')
-    for e in expenses_by_month:
-        month_name = e['month'].strftime('%B')
-        if month_name not in monthly_data:
-            monthly_data[month_name] = {'month': month_name, 'income': 0, 'expense': 0}
-        monthly_data[month_name]['expense'] = float(e['expense'])
+    # 1. Calculate monthly share from vehicles
+    # Get all vehicles where user is a partner
+    vehicles = user.vehicles.all()
 
-    # Calculate profit for each month and sort
+    for vehicle in vehicles:
+        num_partners = vehicle.partners.count()
+        if num_partners > 0:
+            # Get monthly stats for this vehicle for the selected year
+            v_rentals = vehicle.rentals.filter(date_out__year=selected_year).annotate(month=TruncMonth('date_out')).values('month').annotate(income=Sum('total_amount_received'))
+            v_expenses = vehicle.expenses.filter(date__year=selected_year).annotate(month=TruncMonth('date')).values('month').annotate(expense=Sum('amount'))
+
+            for r in v_rentals:
+                m_idx = r['month'].month
+                if m_idx not in monthly_shares:
+                    monthly_shares[m_idx] = {'income': 0, 'expense': 0}
+                monthly_shares[m_idx]['income'] += float(r['income']) / num_partners
+
+            for e in v_expenses:
+                m_idx = e['month'].month
+                if m_idx not in monthly_shares:
+                    monthly_shares[m_idx] = {'income': 0, 'expense': 0}
+                monthly_shares[m_idx]['expense'] += float(e['expense']) / num_partners
+
+    # 2. Calculate monthly taken amounts
+    taken_amounts = TakenAmount.objects.filter(user=user, date__year=selected_year).order_by('-date')
+    taken_by_month = taken_amounts.annotate(month=TruncMonth('date')).values('month').annotate(amount=Sum('amount')).order_by('month')
+
+    for t in taken_by_month:
+        m_idx = t['month'].month
+        monthly_taken[m_idx] = float(t['amount'])
+
+    # 3. Merge into final monthly data
     final_monthly_data = []
-    months_order = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-    
-    for month in months_order:
-        if month in monthly_data:
-            data = monthly_data[month]
+
+    # Helper for month names
+    import calendar
+
+    for m_idx in range(1, 13):
+        month_name = calendar.month_name[m_idx]
+        data = {
+            'month': month_name,
+            'income': 0,
+            'expense': 0,
+            'profit': 0,
+            'taken': 0
+        }
+
+        # Add share data
+        if m_idx in monthly_shares:
+            data['income'] = monthly_shares[m_idx]['income']
+            data['expense'] = monthly_shares[m_idx]['expense']
             data['profit'] = data['income'] - data['expense']
+
+        # Add taken data
+        if m_idx in monthly_taken:
+            data['taken'] = monthly_taken[m_idx]
+
+        # Only add if there's data
+        if data['income'] != 0 or data['expense'] != 0 or data['taken'] != 0:
             final_monthly_data.append(data)
+
+    # Calculate vehicle-based profit shares and taken amounts (All time or selected year? Usually all time for balance)
+    # But for the table we might want to show selected year stats?
+    # The balance is usually a running balance.
+
+    vehicle_data = []
+    total_profit_share = Decimal('0')
+    total_taken = Decimal('0')
+
+    for vehicle in vehicles:
+        # Get total profit for the vehicle (All time)
+        v_rentals_total = vehicle.rentals.aggregate(Sum('total_amount_received'))['total_amount_received__sum'] or 0
+        v_expenses_total = vehicle.expenses.aggregate(Sum('amount'))['amount__sum'] or 0
+        v_profit = Decimal(str(v_rentals_total)) - Decimal(str(v_expenses_total))
+
+        # Calculate share based on number of partners
+        num_partners = vehicle.partners.count()
+        user_share = Decimal('0')
+        if num_partners > 0:
+            user_share = v_profit / num_partners
+
+        # Get taken amount for this vehicle by this user (All time)
+        vehicle_taken = TakenAmount.objects.filter(
+            user=user,
+            vehicle=vehicle
+        ).aggregate(Sum('amount'))['amount__sum'] or Decimal('0')
+
+        # Calculate balance for this vehicle
+        vehicle_balance = user_share - Decimal(str(vehicle_taken))
+
+        vehicle_data.append({
+            'vehicle': vehicle,
+            'total_profit': v_profit,
+            'num_partners': num_partners,
+            'user_share': user_share,
+            'taken_amount': vehicle_taken,
+            'balance': vehicle_balance
+        })
+
+        total_profit_share += user_share
+        total_taken += Decimal(str(vehicle_taken))
+
+    remaining_balance = total_profit_share - total_taken
+
+    # Calculate totals from final_monthly_data (for the selected year)
+    for data in final_monthly_data:
+        total_income += data['income']
+        total_expense += data['expense']
+
+    profit = total_income - total_expense
 
     # Get available years for filter
     rental_years = Rental.objects.filter(user=user).dates('date_out', 'year')
     expense_years = Expense.objects.filter(user=user).dates('date', 'year')
-    available_years = sorted(list(set([d.year for d in rental_years] + [d.year for d in expense_years] + [current_year])), reverse=True)
+    taken_years = TakenAmount.objects.filter(user=user).dates('date', 'year')
+    # Also check vehicle rentals where user is partner
+    vehicle_rental_years = Rental.objects.filter(vehicle__partners=user).dates('date_out', 'year')
+
+    available_years = sorted(list(set(
+        [d.year for d in rental_years] +
+        [d.year for d in expense_years] +
+        [d.year for d in taken_years] +
+        [d.year for d in vehicle_rental_years] +
+        [current_year]
+    )), reverse=True)
 
     context = {
         'user_obj': user,
@@ -526,9 +725,12 @@ def user_detail(request, pk):
         'total_income': total_income,
         'total_expense': total_expense,
         'profit': profit,
+        'taken_amount': total_taken, # This is all-time taken amount
+        'remaining_balance': remaining_balance,
         'monthly_data': final_monthly_data,
         'selected_year': selected_year,
         'available_years': available_years,
+        'vehicle_data': vehicle_data,
     }
     return render(request, 'user_detail.html', context)
 
@@ -566,3 +768,411 @@ def user_delete(request, pk):
         messages.success(request, f'User "{username}" deleted successfully.')
         return redirect('user_list')
     return render(request, 'confirm_delete.html', {'object': user, 'object_type': 'user'})
+
+@require_POST
+def update_taken_amount(request, pk):
+    """Update the taken amount for a user from a specific vehicle"""
+    user = get_object_or_404(User, pk=pk)
+    amount = request.POST.get('amount')
+    vehicle_id = request.POST.get('vehicle_id')
+
+    if amount and vehicle_id:
+        try:
+            amount = Decimal(str(amount))
+            vehicle = get_object_or_404(Vehicle, pk=vehicle_id)
+
+            # Verify user is a partner of this vehicle
+            if not vehicle.partners.filter(pk=user.pk).exists():
+                messages.error(request, 'You are not a partner of this vehicle.')
+                return redirect('user_detail', pk=pk)
+
+            # Create a record of this transaction
+            TakenAmount.objects.create(
+                user=user,
+                vehicle=vehicle,
+                amount=amount,
+                date=timezone.now().date()
+            )
+
+            messages.success(request, f'Successfully recorded ₹{amount} taken from {vehicle.name}.')
+        except (ValueError, TypeError, Exception) as e:
+            messages.error(request, f'Error updating amount: {str(e)}')
+    else:
+        messages.error(request, 'Amount and vehicle are required.')
+
+    return redirect('user_detail', pk=pk)
+
+
+# Vehicle Partners API
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+
+@require_http_methods(["GET"])
+def vehicle_partners_get(request, pk):
+    """Get all partners and selected partners for a vehicle"""
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+    all_partners = User.objects.filter(is_active=True).order_by('username')
+    selected_partners = vehicle.partners.all()
+
+    return JsonResponse({
+        'all_partners': [{'id': p.id, 'username': p.username} for p in all_partners],
+        'selected_partners': [p.id for p in selected_partners]
+    })
+
+@require_POST
+def vehicle_partners_update(request, pk):
+    """Update partners for a vehicle"""
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+    partner_ids = request.POST.getlist('partners')
+
+    if partner_ids:
+        partners = User.objects.filter(pk__in=partner_ids, is_active=True)
+        vehicle.partners.set(partners)
+    else:
+        vehicle.partners.clear()
+
+    return JsonResponse({'success': True})
+
+@require_POST
+def pay_emi(request, pk):
+    """Create an EMI expense for a vehicle"""
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+
+    try:
+        emi_config = vehicle.emi
+        if not emi_config.is_active or emi_config.amount <= 0:
+            messages.error(request, 'No active EMI configured for this vehicle.')
+            return redirect('vehicle_detail', pk=pk)
+    except:
+        messages.error(request, 'No EMI configured for this vehicle.')
+        return redirect('vehicle_detail', pk=pk)
+
+    today = date.today()
+
+    # Check if EMI for this month has already been paid
+    from .models import EMIPayment
+    existing_emi = EMIPayment.objects.filter(
+        vehicle=vehicle,
+        month_paid_for__year=today.year,
+        month_paid_for__month=today.month
+    ).exists()
+
+    if existing_emi:
+        messages.warning(request, 'EMI for this month has already been paid.')
+        return redirect('vehicle_detail', pk=pk)
+
+    # Create EMI payment
+    emi_payment = EMIPayment.objects.create(
+        vehicle=vehicle,
+        date=today,
+        month_paid_for=today.replace(day=1),
+        amount=emi_config.amount,
+        remarks=f'EMI Payment for {today.strftime("%B %Y")}'
+    )
+
+    # Send email notification to partners
+    from .notifications import send_partner_notification
+    send_partner_notification(vehicle, 'emi_payment', {
+        'amount': emi_config.amount,
+        'date': today,
+        'month': today.strftime("%B %Y"),
+    })
+
+    messages.success(request, f'EMI of ₹{emi_config.amount} has been recorded successfully.')
+    return redirect('vehicle_detail', pk=pk)
+
+@require_POST
+def delete_emi(request, pk):
+    """Delete an EMI payment"""
+    from .models import EMIPayment
+    emi_payment = get_object_or_404(EMIPayment, pk=pk)
+    vehicle_id = emi_payment.vehicle.id
+    emi_payment.delete()
+    messages.success(request, 'EMI payment deleted successfully.')
+    return redirect('vehicle_detail', pk=vehicle_id)
+
+@require_POST
+def update_emi(request, pk):
+    """Update or create EMI configuration for a vehicle"""
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+
+    amount = request.POST.get('emi_amount')
+    due_day = request.POST.get('emi_due_day')
+    warning_days = request.POST.get('emi_warning_days')
+    is_active = request.POST.get('emi_is_active') == 'on'
+
+    if not amount or not due_day or not warning_days:
+        messages.error(request, 'All EMI fields are required.')
+        return redirect('vehicle_detail', pk=pk)
+
+    try:
+        from .models import EMI
+        amount = Decimal(str(amount))
+        due_day = int(due_day)
+        warning_days = int(warning_days)
+
+        # Validate due_day
+        if due_day < 1 or due_day > 31:
+            messages.error(request, 'Due day must be between 1 and 31.')
+            return redirect('vehicle_detail', pk=pk)
+
+        # Validate warning_days
+        if warning_days < 0 or warning_days > 30:
+            messages.error(request, 'Warning days must be between 0 and 30.')
+            return redirect('vehicle_detail', pk=pk)
+
+        # Update or create EMI
+        emi, created = EMI.objects.update_or_create(
+            vehicle=vehicle,
+            defaults={
+                'amount': amount,
+                'due_day': due_day,
+                'warning_days': warning_days,
+                'is_active': is_active
+            }
+        )
+
+        action = 'created' if created else 'updated'
+        messages.success(request, f'EMI configuration {action} successfully.')
+    except (ValueError, TypeError, Exception) as e:
+        messages.error(request, f'Error updating EMI: {str(e)}')
+
+    return redirect('vehicle_detail', pk=pk)
+
+
+from django.http import HttpResponse
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+def vehicle_export_excel(request, pk):
+    """Export vehicle data to Excel based on month/year filter - matching exact style"""
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+    month = request.GET.get('month', 'all')
+    year = request.GET.get('year', str(datetime.now().year))
+
+    # Create workbook
+    wb = Workbook()
+
+    # Filter data based on month/year
+    if month == 'all':
+        rentals = vehicle.rentals.all().order_by('date_out')
+        expenses = vehicle.expenses.all().order_by('date')
+        filename = f"{vehicle.name}_{year}_All_Data.xlsx"
+        period_text = f"All Data - {year}"
+    else:
+        rentals = vehicle.rentals.filter(
+            date_out__year=year,
+            date_out__month=month
+        ).order_by('date_out')
+        expenses = vehicle.expenses.filter(
+            date__year=year,
+            date__month=month
+        ).order_by('date')
+        month_name = datetime(int(year), int(month), 1).strftime('%B')
+        filename = f"{vehicle.name}_{month_name}_{year}.xlsx"
+        period_text = f"{month_name} {year}"
+
+    # Styles
+    title_font = Font(bold=True, size=14, color="FF0000")  # Red
+    header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")  # Yellow
+    header_font = Font(bold=True, size=10)
+    border_thin = Border(
+        left=Side(style='thin', color='000000'),
+        right=Side(style='thin', color='000000'),
+        top=Side(style='thin', color='000000'),
+        bottom=Side(style='thin', color='000000')
+    )
+    center_align = Alignment(horizontal='center', vertical='center')
+    right_align = Alignment(horizontal='right', vertical='center')
+
+    # ===== RENTAL SHEET =====
+    ws = wb.active
+    ws.title = "Rental History"
+
+    # Calculate totals first
+    total_revenue = sum(r.total_amount_received for r in rentals)
+    total_expense = sum(e.amount for e in expenses)
+    profit = total_revenue - total_expense
+
+    # Title row - Vehicle name and registration
+    title_text = f"{vehicle.name.upper()}  {vehicle.registration_number.upper()}"
+    ws.merge_cells('A1:P1')
+    title_cell = ws.cell(row=1, column=1, value=title_text)
+    title_cell.font = title_font
+    title_cell.alignment = center_align
+
+    # Financial Summary Section (rows 2-4)
+    ws.cell(row=2, column=1, value="Revenue:").font = Font(bold=True, size=11)
+    cell_rev = ws.cell(row=2, column=2, value=float(total_revenue))
+    cell_rev.font = Font(bold=True, size=11, color="008000")  # Green
+    cell_rev.alignment = right_align
+
+    ws.cell(row=3, column=1, value="Expenses:").font = Font(bold=True, size=11)
+    cell_exp = ws.cell(row=3, column=2, value=float(total_expense))
+    cell_exp.font = Font(bold=True, size=11, color="FF0000")  # Red
+    cell_exp.alignment = right_align
+
+    ws.cell(row=4, column=1, value="Profit:").font = Font(bold=True, size=11)
+    cell_profit = ws.cell(row=4, column=2, value=float(profit))
+    cell_profit.font = Font(bold=True, size=11, color="008000" if profit >= 0 else "FF0000")
+    cell_profit.alignment = right_align
+
+    # Vehicle delivery date section (rows 2-5, columns M-O)
+    ws.cell(row=2, column=13, value="ADV.").font = Font(bold=True, size=9)
+    ws.cell(row=2, column=14, value=vehicle.registration_number).alignment = center_align
+    ws.cell(row=3, column=13, value="ADNAN").font = Font(bold=True, size=9)
+    ws.cell(row=3, column=14, value=vehicle.registration_number).alignment = center_align
+    ws.cell(row=4, column=13, value="TOTAL AMOUNT").font = Font(bold=True, size=9)
+    ws.cell(row=4, column=14, value="VEHICLE DELIVERY DATE").font = Font(bold=True, size=9)
+    ws.cell(row=4, column=15).fill = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")
+
+    ws.cell(row=5, column=13, value="EMI DATE").font = Font(bold=True, size=9)
+    ws.cell(row=5, column=14, value=datetime.now().strftime('%d/%m/%Y'))
+
+    # Headers (row 6)
+    headers = [
+        'DATE OUT', 'TIME OUT', 'DATE IN', 'TIME IN', 'CUSTOMER', 'CONTACT NO.',
+        'CUSTOMER ID', 'C/O', 'DESTINATION', 'DAYS OF RENT', 'RENT/DAY',
+        'ADV. AMOUNT', 'STARTING KM', 'ENDING KM', 'TOTAL AMOUNT RECEIVED', 'BALANCE'
+    ]
+
+    for col_idx, header in enumerate(headers, 1):
+        cell = ws.cell(row=6, column=col_idx, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_align
+        cell.border = border_thin
+
+    # Set column widths
+    column_widths = [12, 10, 12, 10, 18, 14, 14, 10, 16, 12, 10, 12, 12, 12, 18, 12]
+    for idx, width in enumerate(column_widths, 1):
+        ws.column_dimensions[chr(64 + idx)].width = width
+
+    # Data rows
+    row_num = 7
+    total_received = 0
+    for rental in rentals:
+        ws.cell(row=row_num, column=1, value=rental.date_out.strftime('%d-%m-%y')).border = border_thin
+        ws.cell(row=row_num, column=1).alignment = center_align
+
+        ws.cell(row=row_num, column=2, value=rental.time_out.strftime('%I:%M %p') if rental.time_out else '').border = border_thin
+        ws.cell(row=row_num, column=2).alignment = center_align
+
+        ws.cell(row=row_num, column=3, value=rental.date_in.strftime('%d-%m-%y') if rental.date_in else '').border = border_thin
+        ws.cell(row=row_num, column=3).alignment = center_align
+
+        ws.cell(row=row_num, column=4, value=rental.time_in.strftime('%I:%M %p') if rental.time_in else '').border = border_thin
+        ws.cell(row=row_num, column=4).alignment = center_align
+
+        ws.cell(row=row_num, column=5, value=rental.customer_name).border = border_thin
+        ws.cell(row=row_num, column=6, value=rental.contact_no or '').border = border_thin
+        ws.cell(row=row_num, column=6).alignment = center_align
+
+        ws.cell(row=row_num, column=7, value=rental.customer_id or '').border = border_thin
+        ws.cell(row=row_num, column=8, value=rental.care_of or '').border = border_thin
+        ws.cell(row=row_num, column=9, value=rental.destination or '').border = border_thin
+
+        cell_days = ws.cell(row=row_num, column=10, value=float(rental.days_of_rent))
+        cell_days.border = border_thin
+        cell_days.alignment = center_align
+
+        cell_rent = ws.cell(row=row_num, column=11, value=float(rental.rent_per_day))
+        cell_rent.border = border_thin
+        cell_rent.alignment = right_align
+
+        cell_adv = ws.cell(row=row_num, column=12, value=float(rental.advance_amount))
+        cell_adv.border = border_thin
+        cell_adv.alignment = right_align
+
+        ws.cell(row=row_num, column=13, value=rental.starting_km or '').border = border_thin
+        ws.cell(row=row_num, column=13).alignment = center_align
+
+        ws.cell(row=row_num, column=14, value=rental.ending_km or '').border = border_thin
+        ws.cell(row=row_num, column=14).alignment = center_align
+
+        cell_total = ws.cell(row=row_num, column=15, value=float(rental.total_amount_received))
+        cell_total.border = border_thin
+        cell_total.alignment = right_align
+
+        # Calculate balance
+        total_rent = float(rental.days_of_rent) * float(rental.rent_per_day)
+        balance = total_rent - float(rental.total_amount_received)
+        cell_balance = ws.cell(row=row_num, column=16, value=balance)
+        cell_balance.border = border_thin
+        cell_balance.alignment = right_align
+
+        total_received += float(rental.total_amount_received)
+        row_num += 1
+
+    # Total row
+    if rentals:
+        ws.cell(row=row_num, column=14, value="TOTAL:").font = Font(bold=True)
+        ws.cell(row=row_num, column=14).alignment = right_align
+        cell_total = ws.cell(row=row_num, column=15, value=total_received)
+        cell_total.font = Font(bold=True)
+        cell_total.alignment = right_align
+        cell_total.fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+
+    # ===== EXPENSE SHEET =====
+    ws_expense = wb.create_sheet("Expense History")
+
+    # Title
+    ws_expense.merge_cells('A1:F1')
+    title_cell = ws_expense.cell(row=1, column=1, value=f"{vehicle.name.upper()} - EXPENSES")
+    title_cell.font = title_font
+    title_cell.alignment = center_align
+
+    # Headers
+    expense_headers = ['DATE', 'PARTICULARS', 'PLACE', 'C/O', 'AMOUNT', 'REMARKS']
+    for col_idx, header in enumerate(expense_headers, 1):
+        cell = ws_expense.cell(row=3, column=col_idx, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_align
+        cell.border = border_thin
+
+    # Set column widths
+    ws_expense.column_dimensions['A'].width = 12
+    ws_expense.column_dimensions['B'].width = 30
+    ws_expense.column_dimensions['C'].width = 20
+    ws_expense.column_dimensions['D'].width = 15
+    ws_expense.column_dimensions['E'].width = 15
+    ws_expense.column_dimensions['F'].width = 20
+
+    # Data rows
+    row_num = 4
+    total_expense = 0
+    for expense in expenses:
+        ws_expense.cell(row=row_num, column=1, value=expense.date.strftime('%d-%m-%y')).border = border_thin
+        ws_expense.cell(row=row_num, column=1).alignment = center_align
+
+        ws_expense.cell(row=row_num, column=2, value=expense.particulars).border = border_thin
+        ws_expense.cell(row=row_num, column=3, value=expense.place or '').border = border_thin
+        ws_expense.cell(row=row_num, column=4, value=expense.care_of or '').border = border_thin
+
+        cell_amount = ws_expense.cell(row=row_num, column=5, value=float(expense.amount))
+        cell_amount.border = border_thin
+        cell_amount.alignment = right_align
+
+        ws_expense.cell(row=row_num, column=6, value='').border = border_thin
+
+        total_expense += float(expense.amount)
+        row_num += 1
+
+    # Total row
+    if expenses:
+        ws_expense.cell(row=row_num, column=4, value="TOTAL:").font = Font(bold=True)
+        ws_expense.cell(row=row_num, column=4).alignment = right_align
+        cell_total = ws_expense.cell(row=row_num, column=5, value=total_expense)
+        cell_total.font = Font(bold=True)
+        cell_total.alignment = right_align
+        cell_total.fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+
+    # Prepare response
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    wb.save(response)
+    return response
+

@@ -23,7 +23,7 @@
             <div class="form-grid">
                 {% for field in form %}
                 <div
-                    class="form-field {% if field.field.widget.input_type == 'checkbox' %}checkbox-field{% endif %} {% if field.name == 'password1' or field.name == 'password2' %}full-width{% endif %}">
+                    class="form-field {% if field.field.widget.input_type == 'checkbox' %}checkbox-field{% endif %} {% if field.name == 'password1' or field.name == 'password2' or field.name == 'partners' %}full-width{% endif %}">
                     {% if field.field.widget.input_type == 'checkbox' %}
                     <div class="checkbox-container">
                         <label class="checkbox-wrapper">
@@ -35,6 +35,40 @@
                         <small class="field-help">{{ field.help_text }}</small>
                         {% endif %}
                     </div>
+                    {% elif field.name == 'partners' %}
+                    <label class="field-label">
+                        {{ field.label }}
+                        {% if field.field.required %}
+                        <span class="required-mark">*</span>
+                        {% endif %}
+                    </label>
+                    <div class="partners-selection-container">
+                        {% if partners %}
+                            {% for partner in partners %}
+                            <label class="partner-option">
+                                <input type="checkbox" name="partners" value="{{ partner.pk }}"
+                                    {% if selected_partners and partner in selected_partners %}checked{% endif %}>
+                                <div class="partner-card">
+                                    <div class="partner-icon">
+                                        <i class="fas fa-user"></i>
+                                    </div>
+                                    <span class="partner-name">{{ partner.username }}</span>
+                                    <div class="check-indicator">
+                                        <i class="fas fa-check"></i>
+                                    </div>
+                                </div>
+                            </label>
+                            {% endfor %}
+                        {% else %}
+                            <div class="no-partners">
+                                <i class="fas fa-users-slash"></i>
+                                <p>No active partners found.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                    {% if field.help_text %}
+                    <small class="field-help">{{ field.help_text }}</small>
+                    {% endif %}
                     {% else %}
                     <label class="field-label" for="{{ field.id_for_label }}">
                         {{ field.label }}
@@ -348,6 +382,28 @@
         margin-top: 0.25rem;
     }
 
+    /* Checkbox Group (Multiple Select) */
+    .checkbox-group-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 1rem;
+        padding: 1rem;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.75rem;
+    }
+
+    .checkbox-item {
+        display: flex;
+        align-items: center;
+    }
+
+    /* Fix for image/file input container */
+    input[type="file"] {
+        height: auto;
+        min-height: 50px;
+    }
+
     /* Error Messages */
     .field-errors {
         margin-top: 0.5rem;
@@ -511,5 +567,184 @@
             /* Prevents zoom on iOS */
         }
     }
+    /* Partners Selection Styling */
+    .partners-selection-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 1rem;
+        padding: 0.5rem 0;
+    }
+
+    .partner-option {
+        position: relative;
+        cursor: pointer;
+    }
+
+    .partner-option input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .partner-card {
+        background: white;
+        border: 2px solid #e5e7eb;
+        border-radius: 0.75rem;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.2s;
+        height: 100%;
+    }
+
+    .partner-option:hover .partner-card {
+        border-color: #d1d5db;
+        transform: translateY(-2px);
+    }
+
+    .partner-option input:checked + .partner-card {
+        border-color: var(--primary-color);
+        background-color: #f0fdfa; /* Light teal bg */
+        box-shadow: 0 4px 6px -1px rgba(20, 184, 166, 0.1), 0 2px 4px -1px rgba(20, 184, 166, 0.06);
+    }
+
+    .partner-icon {
+        width: 40px;
+        height: 40px;
+        background: #f3f4f6;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6b7280;
+        font-size: 1.25rem;
+        transition: all 0.2s;
+    }
+
+    .partner-option input:checked + .partner-card .partner-icon {
+        background: var(--primary-color);
+        color: white;
+    }
+
+    .partner-name {
+        font-weight: 600;
+        color: var(--text-primary);
+        text-align: center;
+        font-size: 0.9375rem;
+    }
+
+    .check-indicator {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        width: 20px;
+        height: 20px;
+        background: var(--primary-color);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 0.75rem;
+        opacity: 0;
+        transform: scale(0);
+        transition: all 0.2s;
+    }
+
+    .partner-option input:checked + .partner-card .check-indicator {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    .no-partners {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 2rem;
+        background: #f9fafb;
+        border-radius: 0.75rem;
+        color: #6b7280;
+    }
+
+    .no-partners i {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+        opacity: 0.5;
+    }
+
+    /* Image Input Styling (ClearableFileInput) */
+    .input-wrapper a {
+        color: var(--primary-color);
+        text-decoration: none;
+        font-weight: 500;
+        margin-right: 0.5rem;
+    }
+
+    .input-wrapper a:hover {
+        text-decoration: underline;
+    }
+
+    .input-wrapper input[type="checkbox"] {
+        width: auto;
+        margin: 0 0.5rem;
+    }
+
+    /* Hide the default text nodes if possible or style them */
+    /* Since we can't easily target text nodes, we make the container look decent */
+    .input-wrapper {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.75rem;
+        background: #fff;
+    }
+
+    /* Target the file input specifically */
+    .input-wrapper input[type="file"] {
+        border: none;
+        padding: 0;
+        background: transparent;
+        width: 100%;
+        margin-top: 0.5rem;
+    }
 </style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const rentPerDayInput = document.getElementById('id_rent_per_day');
+        const daysInput = document.getElementById('id_days_of_rent');
+        const discountInput = document.getElementById('id_discounted_amount');
+        const totalInput = document.getElementById('id_total_amount_received');
+
+        if (rentPerDayInput && daysInput && discountInput && totalInput) {
+            // Make rent per day readonly
+            rentPerDayInput.setAttribute('readonly', true);
+            rentPerDayInput.style.backgroundColor = '#f3f4f6';
+            rentPerDayInput.style.cursor = 'not-allowed';
+
+            function calculateTotal() {
+                const rentPerDay = parseFloat(rentPerDayInput.value) || 0;
+                const days = parseFloat(daysInput.value) || 0;
+                const discount = parseFloat(discountInput.value) || 0;
+
+                const totalRent = rentPerDay * days;
+                const finalAmount = Math.max(0, totalRent - discount);
+
+                totalInput.value = finalAmount.toFixed(2);
+            }
+
+            // Add event listeners
+            daysInput.addEventListener('input', calculateTotal);
+            discountInput.addEventListener('input', calculateTotal);
+
+            // Initial calculation if values exist
+            if (daysInput.value) {
+                calculateTotal();
+            }
+        }
+    });
+</script>
 {% endblock %}

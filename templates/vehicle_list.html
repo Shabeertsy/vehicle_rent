@@ -55,6 +55,16 @@
                     <i class="fas fa-calendar-plus"></i>
                     <span>{{ vehicle.created_at|date:"M d, Y" }}</span>
                 </div>
+                <div class="detail-item partners-info">
+                    <i class="fas fa-users"></i>
+                    <span>
+                        {% if vehicle.partners.count > 0 %}
+                            {{ vehicle.partners.count }} Partner{{ vehicle.partners.count|pluralize }}
+                        {% else %}
+                            No partners assigned
+                        {% endif %}
+                    </span>
+                </div>
             </div>
         </div>
 
@@ -63,6 +73,9 @@
                 <i class="fas fa-chart-line"></i>
                 View Details
             </a>
+            <button class="card-btn secondary-btn" onclick="openPartnersModal({{ vehicle.id }}, '{{ vehicle.name|escapejs }}')" title="Manage Partners">
+                <i class="fas fa-users"></i>
+            </button>
             <a href="{% url 'vehicle_edit' vehicle.id %}" class="card-btn secondary-btn">
                 <i class="fas fa-edit"></i>
             </a>
@@ -87,6 +100,119 @@
     </div>
     {% endfor %}
 </div>
+
+<!-- Partners Modal -->
+<div id="partnersModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2><i class="fas fa-users"></i> Manage Partners</h2>
+            <button class="close-btn" onclick="closePartnersModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <p class="modal-subtitle">Select partners for <strong id="vehicleName"></strong></p>
+            <form id="partnersForm" method="post">
+                {% csrf_token %}
+                <div class="partners-grid" id="partnersGrid">
+                    <!-- Partners will be loaded here -->
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i>
+                        Save Partners
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closePartnersModal()">
+                        <i class="fas fa-times"></i>
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentVehicleId = null;
+
+function openPartnersModal(vehicleId, vehicleName) {
+    currentVehicleId = vehicleId;
+    document.getElementById('vehicleName').textContent = vehicleName;
+    document.getElementById('partnersModal').style.display = 'flex';
+
+    // Load partners for this vehicle
+    fetch(`/vehicles/${vehicleId}/partners/`)
+        .then(response => response.json())
+        .then(data => {
+            const grid = document.getElementById('partnersGrid');
+            grid.innerHTML = '';
+
+            data.all_partners.forEach(partner => {
+                const isSelected = data.selected_partners.includes(partner.id);
+                const partnerCard = `
+                    <label class="partner-option">
+                        <input type="checkbox" name="partners" value="${partner.id}" ${isSelected ? 'checked' : ''}>
+                        <div class="partner-card">
+                            <div class="partner-icon">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <span class="partner-name">${partner.username}</span>
+                            <div class="check-indicator">
+                                <i class="fas fa-check"></i>
+                            </div>
+                        </div>
+                    </label>
+                `;
+                grid.innerHTML += partnerCard;
+            });
+        })
+        .catch(error => {
+            console.error('Error loading partners:', error);
+            alert('Failed to load partners. Please try again.');
+        });
+}
+
+function closePartnersModal() {
+    document.getElementById('partnersModal').style.display = 'none';
+    currentVehicleId = null;
+}
+
+// Handle form submission
+document.getElementById('partnersForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+
+    fetch(`/vehicles/${currentVehicleId}/partners/update/`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            closePartnersModal();
+            location.reload(); // Reload to show updated partner count
+        } else {
+            alert('Failed to update partners. Please try again.');
+        }
+    })
+    .catch(error => {
+        console.error('Error updating partners:', error);
+        alert('Failed to update partners. Please try again.');
+    });
+});
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('partnersModal');
+    if (event.target === modal) {
+        closePartnersModal();
+    }
+}
+</script>
 
 <style>
     /* Header Styles */
@@ -399,5 +525,229 @@
             font-size: 1.125rem;
         }
     }
+
+    /* Partners Info */
+    .partners-info {
+        color: var(--primary-color) !important;
+        font-weight: 600;
+    }
+
+    .partners-info i {
+        color: var(--primary-color) !important;
+    }
+
+    /* Modal Styles */
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(4px);
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 1rem;
+        width: 90%;
+        max-width: 700px;
+        max-height: 85vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+
+    .modal-header {
+        padding: 1.5rem 2rem;
+        border-bottom: 1px solid #f3f4f6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .modal-header h2 {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .modal-header h2 i {
+        color: var(--primary-color);
+    }
+
+    .close-btn {
+        background: #f3f4f6;
+        border: none;
+        width: 36px;
+        height: 36px;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6b7280;
+        transition: all 0.2s;
+    }
+
+    .close-btn:hover {
+        background: #e5e7eb;
+        color: var(--text-primary);
+    }
+
+    .modal-body {
+        padding: 2rem;
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .modal-subtitle {
+        margin: 0 0 1.5rem 0;
+        color: #6b7280;
+        font-size: 0.9375rem;
+    }
+
+    .partners-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .partner-option {
+        position: relative;
+        cursor: pointer;
+    }
+
+    .partner-option input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .partner-card {
+        background: white;
+        border: 2px solid #e5e7eb;
+        border-radius: 0.75rem;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.2s;
+        height: 100%;
+    }
+
+    .partner-option:hover .partner-card {
+        border-color: #d1d5db;
+        transform: translateY(-2px);
+    }
+
+    .partner-option input:checked + .partner-card {
+        border-color: var(--primary-color);
+        background-color: #f0fdfa;
+        box-shadow: 0 4px 6px -1px rgba(20, 184, 166, 0.1);
+    }
+
+    .partner-icon {
+        width: 40px;
+        height: 40px;
+        background: #f3f4f6;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6b7280;
+        font-size: 1.25rem;
+        transition: all 0.2s;
+    }
+
+    .partner-option input:checked + .partner-card .partner-icon {
+        background: var(--primary-color);
+        color: white;
+    }
+
+    .partner-name {
+        font-weight: 600;
+        color: var(--text-primary);
+        text-align: center;
+        font-size: 0.875rem;
+    }
+
+    .check-indicator {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        width: 20px;
+        height: 20px;
+        background: var(--primary-color);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 0.75rem;
+        opacity: 0;
+        transform: scale(0);
+        transition: all 0.2s;
+    }
+
+    .partner-option input:checked + .partner-card .check-indicator {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    .modal-actions {
+        display: flex;
+        gap: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid #f3f4f6;
+    }
+
+    .modal-actions .btn {
+        flex: 1;
+        padding: 0.875rem 1.5rem;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        border-radius: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.2s;
+        border: none;
+        cursor: pointer;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, var(--primary-color) 0%, #4f46e5 100%);
+        color: white;
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 16px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-secondary {
+        background: #f3f4f6;
+        color: #6b7280;
+    }
+
+    .btn-secondary:hover {
+        background: #e5e7eb;
+        color: var(--text-primary);
+    }
+</style>
 </style>
 {% endblock %}

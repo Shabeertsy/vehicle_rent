@@ -7,14 +7,77 @@
     <div>
         <h1 class="page-title">{{ vehicle.name }}</h1>
         <p class="text-secondary">{{ vehicle.registration_number }}</p>
+        {% if vehicle.partners.count > 0 %}
+        <div class="partners-list">
+            <i class="fas fa-users"></i>
+            <span class="partners-label">Partners:</span>
+            {% for partner in vehicle.partners.all %}
+                <span class="partner-badge">{{ partner.username }}</span>{% if not forloop.last %}, {% endif %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="partners-list no-partners">
+            <i class="fas fa-users-slash"></i>
+            <span class="text-muted">No partners assigned</span>
+        </div>
+        {% endif %}
     </div>
     <div class="flex gap-2">
+        <button type="button" class="btn btn-success" onclick="downloadExcel()" id="download-excel-btn">
+            <i class="fas fa-file-excel"></i> Download Excel
+        </button>
         <a href="{% url 'import_data' %}?vehicle_id={{ vehicle.id }}" class="btn btn-primary"
             style="background-color: var(--warning);"><i class="fas fa-file-import"></i> Import Excel</a>
+        <button type="button" class="btn btn-primary" onclick="openEmiModal()" style="background-color: #8b5cf6;">
+            <i class="fas fa-cog"></i> EMI Settings
+        </button>
         <a href="{% url 'vehicle_edit' vehicle.id %}" class="btn btn-primary">Edit Vehicle</a>
         <a href="{% url 'vehicle_delete' vehicle.id %}" class="btn btn-danger">Delete</a>
     </div>
 </div>
+
+<!-- Monthly Download Reminder -->
+<div class="download-reminder" id="download-reminder" style="display: none;">
+    <div class="reminder-content">
+        <div class="reminder-icon">
+            <i class="fas fa-calendar-check"></i>
+        </div>
+        <div class="reminder-text">
+            <strong>Monthly Report Reminder</strong>
+            <p>Don't forget to download this month's data for your records!</p>
+        </div>
+        <button type="button" class="btn-close-reminder" onclick="closeReminder()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+</div>
+
+<!-- EMI Warning Banner -->
+<!-- EMI Warning Banner -->
+<!-- EMI Warning Banner -->
+{% if emi_warning and not emi_is_paid %}
+<div class="emi-warning-banner">
+    <div class="emi-warning-content">
+        <div class="emi-warning-icon">
+            <i class="fas fa-exclamation-triangle"></i>
+        </div>
+        <div class="emi-warning-text">
+            <strong>{% if days_until_emi < 0 %}EMI Overdue!{% else %}EMI Due Soon!{% endif %}</strong>
+            <p>
+                EMI of ₹{{ emi_config.amount }} is due on {{ emi_due_date|date:"F d, Y" }}
+                ({% if days_until_emi < 0 %}{{ days_until_emi|stringformat:"d"|slice:"1:" }} days overdue{% else %}{{ days_until_emi }} days left{% endif %})
+            </p>
+        </div>
+        <form action="{% url 'pay_emi' vehicle.id %}" method="post" style="margin: 0;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-warning emi-pay-btn">
+                <i class="fas fa-money-bill-wave"></i>
+                Pay EMI
+            </button>
+        </form>
+    </div>
+</div>
+{% endif %}
 
 <!-- Month/Year filters and monthly vehicle summary -->
 <div style="margin: 2.5rem 0 2.3rem 0">
@@ -22,6 +85,8 @@
         <div>
             <div class="month-btn-group" style="display: flex; gap: 2px;">
                 <!-- Hardcoded month buttons to avoid template split/for/zip limitations -->
+                <button type="button" class="month-btn" data-month="all" onclick="selectMonth(this)"
+                    id="month-btn-all">All</button>
                 <button type="button" class="month-btn" data-month="01" onclick="selectMonth(this)"
                     id="month-btn-01">Jan</button>
                 <button type="button" class="month-btn" data-month="02" onclick="selectMonth(this)"
@@ -57,17 +122,21 @@
 
 
     <!-- Stats for this vehicle -->
-    <div class="card-grid mt-5">
+    <!-- Stats for this vehicle -->
+    <div class="card-grid mt-5" id="stats-container"
+         data-total-revenue="{{ total_revenue }}"
+         data-total-expense="{{ total_expense }}"
+         data-total-profit="{{ profit }}">
         <div class="card">
-            <div class="card-title">Monthly Revenue</div>
+            <div class="card-title">Revenue</div>
             <div class="card-value text-success" id="card-revenue">₹0.00</div>
         </div>
         <div class="card">
-            <div class="card-title">Monthly Expenses</div>
+            <div class="card-title">Expenses</div>
             <div class="card-value text-danger" id="card-expense">₹0.00</div>
         </div>
         <div class="card">
-            <div class="card-title">Monthly Profit</div>
+            <div class="card-title">Profit</div>
             <div class="card-value" id="card-profit">₹0.00</div>
         </div>
     </div>
@@ -91,8 +160,7 @@
                         <td>{{ row.month|date:"F Y" }}</td>
                         <td class="text-success">₹{{ row.income|floatformat:2 }}</td>
                         <td class="text-danger">₹{{ row.expense|floatformat:2 }}</td>
-                        <td class="{% if row.profit >= 0 %}text-success{% else %}text-danger{% endif %}">₹{{
-                            row.profit|floatformat:2 }}</td>
+                        <td class="{% if row.profit >= 0 %}text-success{% else %}text-danger{% endif %}">₹{{ row.profit|floatformat:2 }}</td>
                     </tr>
                     {% empty %}
                     <tr data-empty="true">
@@ -109,9 +177,11 @@
 
 <!-- Tabs -->
 <div class="card" style="margin-bottom: 2rem;">
-    <div style="border-bottom: 1px solid #e5e7eb; margin-bottom: 1.5rem;">
+    <div class="tabs-scroll-container">
         <button class="tab-btn active" onclick="openTab(event, 'rentals')">Rentals</button>
-        <button class="tab-btn" onclick="openTab(event, 'expenses')">Expenses</button>
+        <button class="tab-btn" onclick="openTab(event, 'expenses')">Expense History</button>
+        <button class="tab-btn" onclick="openTab(event, 'monthly')">Monthly Summary</button>
+        <button class="tab-btn" onclick="openTab(event, 'emi')">EMI History</button>
     </div>
 
     <!-- Rentals Tab -->
@@ -138,7 +208,7 @@
                 </thead>
                 <tbody>
                     {% for rental in rentals %}
-                    <tr>
+                    <tr class="rental-row" data-month="{{ rental.date_out|date:'m' }}" data-year="{{ rental.date_out|date:'Y' }}">
                         <td>{{ rental.date_out }}</td>
                         <td>
                             {% if rental.time_out %}
@@ -172,6 +242,9 @@
                         <td colspan="10" class="text-secondary" style="text-align: center;">No rentals recorded</td>
                     </tr>
                     {% endfor %}
+                    <tr class="rental-empty-state" style="display: none;">
+                        <td colspan="10" class="text-secondary" style="text-align: center; padding: 2rem;">No rentals found for the selected period</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
@@ -180,8 +253,25 @@
     <!-- Expenses Tab -->
     <div id="expenses" class="tab-content" style="display: none;">
         <div class="flex justify-between items-center mb-4">
-            <h3 class="card-title" style="font-size: 1.1rem; color: var(--text-primary);">Expense History</h3>
-            <a href="{% url 'expense_create' vehicle.id %}" class="btn btn-primary btn-sm">Add Expense</a>
+            <div class="flex items-center gap-3">
+                <h3 class="card-title" style="font-size: 1.1rem; color: var(--text-primary);">Expense History</h3>
+                {% if emi_is_paid %}
+                <span class="badge-success">
+                    <i class="fas fa-check-circle"></i> EMI Paid
+                </span>
+                {% endif %}
+            </div>
+            <div class="flex gap-2">
+                {% if emi_config.is_active and not emi_is_paid %}
+                <form action="{% url 'pay_emi' vehicle.id %}" method="post" style="margin: 0;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-warning btn-sm" style="background: #f59e0b; border: none;">
+                        <i class="fas fa-money-bill-wave"></i> Pay EMI
+                    </button>
+                </form>
+                {% endif %}
+                <a href="{% url 'expense_create' vehicle.id %}" class="btn btn-primary btn-sm">Add Expense</a>
+            </div>
         </div>
         <div class="table-container" style="box-shadow: none; padding: 0;">
             <table>
@@ -196,7 +286,7 @@
                 </thead>
                 <tbody>
                     {% for expense in expenses %}
-                    <tr>
+                    <tr class="expense-row" data-month="{{ expense.date|date:'m' }}" data-year="{{ expense.date|date:'Y' }}">
                         <td>{{ expense.date }}</td>
                         <td>{{ expense.particulars }}</td>
                         <td>{{ expense.place }}</td>
@@ -213,8 +303,134 @@
                         <td colspan="5" class="text-secondary" style="text-align: center;">No expenses recorded</td>
                     </tr>
                     {% endfor %}
+                    <tr class="expense-empty-state" style="display: none;">
+                        <td colspan="5" class="text-secondary" style="text-align: center; padding: 2rem;">No expenses found for the selected period</td>
+                    </tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Monthly Summary Tab -->
+    <div id="monthly" class="tab-content" style="display: none;">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="card-title" style="font-size: 1.1rem; color: var(--text-primary);">Monthly Summary</h3>
+        </div>
+        <div class="table-container" style="box-shadow: none; padding: 0;">
+            <table class="monthly-summary-table">
+                <thead>
+                    <tr>
+                        <th>Month</th>
+                        <th>Income</th>
+                        <th>Expenses</th>
+                        <th>Profit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for data in monthly_data %}
+                    <tr>
+                        <td>{{ data.month }}</td>
+                        <td class="text-success">₹{{ data.income|floatformat:2 }}</td>
+                        <td class="text-danger">₹{{ data.expense|floatformat:2 }}</td>
+                        <td class="{% if data.profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            <strong>₹{{ data.profit|floatformat:2 }}</strong>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-secondary" style="text-align: center; padding: 2rem;">No data available</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- EMI History Tab -->
+    <div id="emi" class="tab-content" style="display: none;">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="card-title" style="font-size: 1.1rem; color: var(--text-primary);">EMI Payment History</h3>
+        </div>
+        <div class="table-container" style="box-shadow: none; padding: 0;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Payment Date</th>
+                        <th>Month Paid For</th>
+                        <th>Amount</th>
+                        <th>Remarks</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payment in emi_payments %}
+                    <tr>
+                        <td>{{ payment.date }}</td>
+                        <td>{{ payment.month_paid_for|date:"F Y" }}</td>
+                        <td class="text-success" style="font-weight: 600;">₹{{ payment.amount }}</td>
+                        <td>{{ payment.remarks|default:"-" }}</td>
+                        <td>
+                            <form action="{% url 'delete_emi' payment.id %}" method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this EMI payment?');">
+                                {% csrf_token %}
+                                <button type="submit" class="text-danger" style="background: none; border: none; cursor: pointer;">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-secondary" style="text-align: center; padding: 2rem;">No EMI payments recorded</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- EMI Configuration Modal -->
+<div id="emiModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>EMI Configuration</h3>
+            <button type="button" class="close-btn" onclick="closeEmiModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form action="{% url 'update_emi' vehicle.id %}" method="post" class="update-form">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="emi_amount">Monthly EMI Amount (₹)</label>
+                    <input type="number" name="emi_amount" id="emi_amount" step="0.01" class="form-input"
+                           value="{{ emi_config.amount|default:'0' }}" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="emi_due_day">Due Day of Month (1-31)</label>
+                    <input type="number" name="emi_due_day" id="emi_due_day" min="1" max="31" class="form-input"
+                           value="{{ emi_config.due_day|default:'1' }}" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="emi_warning_days">Warning Days Before Due Date</label>
+                    <input type="number" name="emi_warning_days" id="emi_warning_days" min="0" max="30" class="form-input"
+                           value="{{ emi_config.warning_days|default:'5' }}" required>
+                    <small class="text-muted">Show warning this many days before the due date.</small>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" name="emi_is_active" id="emi_is_active"
+                               {% if emi_config.is_active %}checked{% endif %}>
+                        <span>Enable EMI Tracking</span>
+                    </label>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEmiModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Configuration</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -305,6 +521,357 @@
     .monthly-summary-table td {
         vertical-align: middle;
     }
+
+    /* Partners List Styling */
+    .partners-list {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: #f0fdfa;
+        border: 1px solid #99f6e4;
+        border-radius: 0.5rem;
+        font-size: 0.9375rem;
+    }
+
+    .partners-list i {
+        color: var(--primary-color);
+        font-size: 1rem;
+    }
+
+    .partners-label {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-right: 0.25rem;
+    }
+
+    .partner-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        background: white;
+        border: 1px solid var(--primary-color);
+        border-radius: 1rem;
+        color: var(--primary-color);
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+
+    .partners-list.no-partners {
+        background: #f9fafb;
+        border-color: #e5e7eb;
+    }
+
+    .partners-list.no-partners i {
+        color: #9ca3af;
+    }
+
+    /* EMI Warning Banner */
+    .emi-warning-banner {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border: 2px solid #f59e0b;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin: 1.5rem 0;
+        box-shadow: 0 4px 6px -1px rgba(245, 158, 11, 0.1);
+    }
+
+    .emi-warning-content {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .emi-warning-icon {
+        width: 50px;
+        height: 50px;
+        background: #f59e0b;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.5rem;
+        flex-shrink: 0;
+    }
+
+    .emi-warning-text {
+        flex: 1;
+        min-width: 200px;
+    }
+
+    .emi-warning-text strong {
+        display: block;
+        color: #92400e;
+        font-size: 1.125rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .emi-warning-text p {
+        margin: 0;
+        color: #78350f;
+        font-size: 0.9375rem;
+    }
+
+    .emi-pay-btn {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+        border: none;
+        padding: 0.875rem 1.5rem;
+        border-radius: 0.75rem;
+        font-weight: 600;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 4px 6px -1px rgba(217, 119, 6, 0.3);
+    }
+
+    .emi-pay-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 12px -1px rgba(217, 119, 6, 0.4);
+    }
+
+    /* EMI Success Banner */
+    .emi-success-banner {
+        background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+        border: 2px solid #10b981;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin: 1.5rem 0;
+        box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.1);
+    }
+
+    .emi-success-content {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .emi-success-icon {
+        width: 50px;
+        height: 50px;
+        background: #10b981;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.5rem;
+        flex-shrink: 0;
+    }
+
+    .emi-success-text {
+        flex: 1;
+    }
+
+    .emi-success-text strong {
+        display: block;
+        color: #065f46;
+        font-size: 1.125rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .emi-success-text p {
+        margin: 0;
+        color: #047857;
+        font-size: 0.9375rem;
+    }
+
+    /* Badge Styles */
+    .badge-success {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.35rem 0.75rem;
+        background: #d1fae5;
+        color: #065f46;
+        border-radius: 9999px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        border: 1px solid #34d399;
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        backdrop-filter: blur(4px);
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 1rem;
+        width: 90%;
+        max-width: 500px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        animation: modalSlideIn 0.3s ease-out;
+    }
+
+    @keyframes modalSlideIn {
+        from {
+            transform: translateY(20px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    .modal-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .modal-header h3 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .close-btn {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: #9ca3af;
+        cursor: pointer;
+        transition: color 0.2s;
+    }
+
+    .close-btn:hover {
+        color: var(--text-primary);
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.25rem;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+    }
+
+    .form-input {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #d1d5db;
+        border-radius: 0.5rem;
+        font-size: 1rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .form-input:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+    }
+
+    .checkbox-group {
+        margin-top: 1rem;
+        padding: 1rem;
+        background: #f9fafb;
+        border-radius: 0.5rem;
+        border: 1px solid #e5e7eb;
+    }
+
+    .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        margin-top: 2rem;
+    }
+
+    /* Download Reminder Banner */
+    .download-reminder {
+        background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+        border: 2px solid #0ea5e9;
+        border-radius: 1rem;
+        padding: 1.25rem;
+        margin: 1.5rem 0;
+        box-shadow: 0 4px 6px -1px rgba(14, 165, 233, 0.1);
+        animation: slideDown 0.3s ease-out;
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .reminder-content {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+    }
+
+    .reminder-icon {
+        width: 45px;
+        height: 45px;
+        background: #0ea5e9;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+
+    .reminder-text {
+        flex: 1;
+    }
+
+    .reminder-text strong {
+        display: block;
+        color: #075985;
+        font-size: 1.0625rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .reminder-text p {
+        margin: 0;
+        color: #0c4a6e;
+        font-size: 0.9375rem;
+    }
+
+    .btn-close-reminder {
+        background: none;
+        border: none;
+        color: #0369a1;
+        font-size: 1.25rem;
+        cursor: pointer;
+        padding: 0.5rem;
+        transition: color 0.2s;
+    }
+
+    .btn-close-reminder:hover {
+        color: #075985;
+    }
 </style>
 
 <script>
@@ -323,6 +890,19 @@
             if (y === thisYear) opt.selected = true;
             yearSelect.appendChild(opt);
         }
+
+        // Set cards to overall totals on load
+        var container = document.getElementById('stats-container');
+        var totalRevenue = parseFloat(container.getAttribute('data-total-revenue') || 0);
+        var totalExpense = parseFloat(container.getAttribute('data-total-expense') || 0);
+        var totalProfit = parseFloat(container.getAttribute('data-total-profit') || 0);
+
+        document.getElementById('card-revenue').textContent = '₹' + totalRevenue.toFixed(2);
+        document.getElementById('card-expense').textContent = '₹' + totalExpense.toFixed(2);
+        var profitEl = document.getElementById('card-profit');
+        profitEl.textContent = '₹' + totalProfit.toFixed(2);
+        profitEl.className = 'card-value ' + (totalProfit >= 0 ? 'text-success' : 'text-danger');
+
         // Month: activate current month by default
         var month = (now.getMonth() + 1).toString().padStart(2, "0");
         var monthBtn = document.getElementById("month-btn-" + month);
@@ -353,34 +933,37 @@
     }
 
     function filterMonthlySummary(month, year) {
-        // Hide all rows except those matching (month, year)
-        var rows = document.querySelectorAll('#monthly-summary-table tbody tr');
+        var isAll = month === 'all';
+
+        // Filter monthly summary table
+        var summaryRows = document.querySelectorAll('#monthly-summary-table tbody tr');
         var found = false;
 
-        // Default values
-        var income = 0;
-        var expense = 0;
-        var profit = 0;
-
-        for (var i = 0; i < rows.length; i++) {
-            var m = rows[i].getAttribute("data-month");
-            var y = rows[i].getAttribute("data-year");
-
-            if (rows[i].getAttribute("data-empty")) {
-                // This is the empty state row
-                rows[i].style.display = found ? "none" : "";
-            } else if (m && y) {
-                // This is a data row
-                if (m === month && y === year.toString()) {
-                    rows[i].style.display = "";
+        if (isAll) {
+            // Show all rows in summary table
+            for (var i = 0; i < summaryRows.length; i++) {
+                if (!summaryRows[i].getAttribute("data-empty")) {
+                    summaryRows[i].style.display = "";
                     found = true;
-
-                    // Get data
-                    income = parseFloat(rows[i].getAttribute("data-income") || 0);
-                    expense = parseFloat(rows[i].getAttribute("data-expense") || 0);
-                    profit = parseFloat(rows[i].getAttribute("data-profit") || 0);
                 } else {
-                    rows[i].style.display = "none";
+                    summaryRows[i].style.display = "none";
+                }
+            }
+        } else {
+            // Filter summary table by month/year
+            for (var i = 0; i < summaryRows.length; i++) {
+                var m = summaryRows[i].getAttribute("data-month");
+                var y = summaryRows[i].getAttribute("data-year");
+
+                if (summaryRows[i].getAttribute("data-empty")) {
+                    summaryRows[i].style.display = found ? "none" : "";
+                } else if (m && y) {
+                    if (m === month && y === year.toString()) {
+                        summaryRows[i].style.display = "";
+                        found = true;
+                    } else {
+                        summaryRows[i].style.display = "none";
+                    }
                 }
             }
         }
@@ -391,15 +974,57 @@
             emptyRow.style.display = found ? "none" : "";
         }
 
-        // Update cards
-        document.getElementById('card-revenue').textContent = '₹' + income.toFixed(2);
-        document.getElementById('card-expense').textContent = '₹' + expense.toFixed(2);
+        // Filter rental rows
+        var rentalRows = document.querySelectorAll('.rental-row');
+        var rentalFound = false;
+        for (var i = 0; i < rentalRows.length; i++) {
+            if (isAll) {
+                rentalRows[i].style.display = "";
+                rentalFound = true;
+            } else {
+                var m = rentalRows[i].getAttribute("data-month");
+                var y = rentalRows[i].getAttribute("data-year");
+                if (m === month && y === year.toString()) {
+                    rentalRows[i].style.display = "";
+                    rentalFound = true;
+                } else {
+                    rentalRows[i].style.display = "none";
+                }
+            }
+        }
 
-        var profitEl = document.getElementById('card-profit');
-        profitEl.textContent = '₹' + profit.toFixed(2);
+        // Show/hide rental empty state
+        var rentalEmptyState = document.querySelector('.rental-empty-state');
+        if (rentalEmptyState) {
+            rentalEmptyState.style.display = rentalFound ? "none" : "";
+        }
 
-        // Update profit color
-        profitEl.className = 'card-value ' + (profit >= 0 ? 'text-success' : 'text-danger');
+        // Filter expense rows
+        var expenseRows = document.querySelectorAll('.expense-row');
+        var expenseFound = false;
+        for (var i = 0; i < expenseRows.length; i++) {
+            if (isAll) {
+                expenseRows[i].style.display = "";
+                expenseFound = true;
+            } else {
+                var m = expenseRows[i].getAttribute("data-month");
+                var y = expenseRows[i].getAttribute("data-year");
+                if (m === month && y === year.toString()) {
+                    expenseRows[i].style.display = "";
+                    expenseFound = true;
+                } else {
+                    expenseRows[i].style.display = "none";
+                }
+            }
+        }
+
+        // Show/hide expense empty state
+        var expenseEmptyState = document.querySelector('.expense-empty-state');
+        if (expenseEmptyState) {
+            expenseEmptyState.style.display = expenseFound ? "none" : "";
+        }
+
+        // Cards always show overall totals - no update needed
     }
 
     // Keep original tab logic
@@ -416,5 +1041,87 @@
         document.getElementById(tabName).style.display = "block";
         evt.currentTarget.className += " active";
     }
+
+    // Modal Logic
+    function openEmiModal() {
+        const modal = document.getElementById('emiModal');
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeEmiModal() {
+        const modal = document.getElementById('emiModal');
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('emiModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeEmiModal();
+        }
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && document.getElementById('emiModal').style.display === 'flex') {
+            closeEmiModal();
+        }
+    });
+
+    // Download Excel Function
+    function downloadExcel() {
+        var activeMonthBtn = document.querySelector('.month-btn.active-month-btn');
+        var month = activeMonthBtn ? activeMonthBtn.getAttribute('data-month') : 'all';
+        var year = document.getElementById('year-select').value;
+
+        var url = '{% url "vehicle_export_excel" vehicle.id %}?month=' + month + '&year=' + year;
+        window.location.href = url;
+
+        // Mark as downloaded for this month
+        localStorage.setItem('lastDownload_{{ vehicle.id }}', new Date().toISOString());
+        closeReminder();
+    }
+
+    // Close Reminder
+    function closeReminder() {
+        document.getElementById('download-reminder').style.display = 'none';
+        localStorage.setItem('reminderClosed_{{ vehicle.id }}', new Date().toISOString());
+    }
+
+    // Show reminder if needed (once per month)
+    function checkReminder() {
+        var now = new Date();
+        var lastDownload = localStorage.getItem('lastDownload_{{ vehicle.id }}');
+        var reminderClosed = localStorage.getItem('reminderClosed_{{ vehicle.id }}');
+
+        var shouldShow = false;
+
+        if (!lastDownload) {
+            shouldShow = true;
+        } else {
+            var lastDownloadDate = new Date(lastDownload);
+            // Show if last download was in a different month
+            if (lastDownloadDate.getMonth() !== now.getMonth() ||
+                lastDownloadDate.getFullYear() !== now.getFullYear()) {
+                shouldShow = true;
+            }
+        }
+
+        // Don't show if reminder was closed today
+        if (reminderClosed) {
+            var closedDate = new Date(reminderClosed);
+            if (closedDate.toDateString() === now.toDateString()) {
+                shouldShow = false;
+            }
+        }
+
+        if (shouldShow) {
+            document.getElementById('download-reminder').style.display = 'block';
+        }
+    }
+
+    // Check reminder on page load
+    setTimeout(checkReminder, 2000); // Show after 2 seconds
 </script>
 {% endblock %}

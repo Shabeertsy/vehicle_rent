@@ -479,3 +479,72 @@ tr:last-child td {
         margin-bottom: 60px;
     }
 }
+
+/* ========================================
+   APP-LIKE MOBILE ENHANCEMENTS
+   ======================================== */
+
+/* Horizontal Scrollable Tabs */
+.tabs-scroll-container {
+    display: flex;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: 1.5rem;
+    /* Hide scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none;  /* IE 10+ */
+}
+
+.tabs-scroll-container::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+}
+
+.tab-btn {
+    flex-shrink: 0;
+}
+
+/* Better Mobile Buttons */
+@media (max-width: 768px) {
+    .header .flex {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        width: 100%;
+    }
+
+    .header .btn {
+        flex: 1 1 auto;
+        justify-content: center;
+        min-width: 120px; /* Ensure buttons don't get too small */
+    }
+
+    /* Make tables more compact on mobile */
+    th, td {
+        padding: 0.75rem 0.5rem;
+    }
+
+    /* Adjust card padding */
+    .card {
+        padding: 1rem;
+    }
+
+    /* Ensure modals fit on screen */
+    .modal-content {
+        width: 95%;
+        margin: 1rem;
+        max-height: 85vh;
+        overflow-y: auto;
+    }
+
+    /* Fix bottom nav z-index and safe area */
+    .bottom-nav {
+        padding-bottom: env(safe-area-inset-bottom);
+        height: calc(65px + env(safe-area-inset-bottom));
+        z-index: 9999; /* Ensure it's on top of everything */
+    }
+
+    .main-content {
+        margin-bottom: calc(75px + env(safe-area-inset-bottom));
+    }
+}

@@ -48,6 +48,16 @@
     </div>
 
     <div class="stat-card">
+        <div class="stat-icon" style="background-color: #f59e0b;">
+            <i class="fas fa-hand-holding-usd"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value">₹{{ user_obj.profile.taken_amount|default:0|floatformat:2 }}</div>
+            <div class="stat-label">Taken Amount</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
         <div class="stat-icon" style="background-color: {% if profit >= 0 %}#10b981{% else %}#ef4444{% endif %};">
             <i class="fas fa-chart-line"></i>
         </div>
@@ -55,24 +65,105 @@
             <div class="stat-value {% if profit >= 0 %}text-success{% else %}text-danger{% endif %}">
                 ₹{{ profit|floatformat:2 }}
             </div>
-            <div class="stat-label">Net Balance ({{ selected_year }})</div>
+            <div class="stat-label">Net Profit ({{ selected_year }})</div>
         </div>
     </div>
+
 </div>
 
 <!-- Year Filter -->
 <div class="filter-container">
-    <form method="get" class="filter-form">
-        <label for="year-filter">
-            <i class="fas fa-calendar-alt"></i>
-            Filter by Year:
-        </label>
-        <select name="year" id="year-filter" onchange="this.form.submit()">
-            {% for year in available_years %}
-            <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>{{ year }}</option>
-            {% endfor %}
-        </select>
-    </form>
+    <div class="filter-section">
+        <form method="get" class="filter-form">
+            <label for="year-filter">
+                <i class="fas fa-calendar-alt"></i>
+                Filter by Year:
+            </label>
+            <select name="year" id="year-filter" onchange="this.form.submit()">
+                {% for year in available_years %}
+                <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>{{ year }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    <div class="filter-section center-section">
+        <div class="balance-display">
+            <span class="balance-label">Remaining Balance</span>
+            <span class="balance-value {% if remaining_balance >= 0 %}text-primary{% else %}text-danger{% endif %}">
+                ₹{{ remaining_balance|floatformat:2 }}
+            </span>
+        </div>
+    </div>
+
+
+</div>
+
+<!-- Vehicle-Based Breakdown -->
+<div class="table-container">
+    <div class="table-header">
+        <h2 class="table-title">
+            <i class="fas fa-car"></i>
+            Vehicles & Profit Share
+        </h2>
+    </div>
+
+    <div class="table-responsive">
+        <table class="modern-table">
+            <thead>
+                <tr>
+                    <th>Vehicle</th>
+                    <th>Total Profit</th>
+                    <th>Partners</th>
+                    <th>Your Share</th>
+                    <th>Taken Amount</th>
+                    <th>Balance</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vdata in vehicle_data %}
+                <tr>
+                    <td>
+                        <a href="{% url 'vehicle_detail' vdata.vehicle.id %}" class="vehicle-link">
+                            {{ vdata.vehicle.name }}
+                        </a>
+                    </td>
+                    <td class="{% if vdata.total_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        ₹{{ vdata.total_profit|floatformat:2 }}
+                    </td>
+                    <td>{{ vdata.num_partners }}</td>
+                    <td class="text-primary">
+                        <strong>₹{{ vdata.user_share|floatformat:2 }}</strong>
+                    </td>
+                    <td class="text-warning">
+                        ₹{{ vdata.taken_amount|floatformat:2 }}
+                    </td>
+                    <td class="{% if vdata.balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        <strong>₹{{ vdata.balance|floatformat:2 }}</strong>
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-primary"
+                                onclick="openTakenAmountModal({{ vdata.vehicle.id }}, '{{ vdata.vehicle.name|escapejs }}', {{ vdata.balance }})">
+                            <i class="fas fa-hand-holding-usd"></i>
+                            Take Amount
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="empty-state">
+                        <div class="empty-content">
+                            <i class="fas fa-car-side"></i>
+                            <h3>No Vehicles</h3>
+                            <p>You are not assigned as a partner to any vehicles yet.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <!-- Monthly Breakdown Table -->
@@ -92,6 +183,7 @@
                     <th>Income</th>
                     <th>Expenses</th>
                     <th>Balance</th>
+                    <th>Taken Amount</th>
                 </tr>
             </thead>
             <tbody>
@@ -103,10 +195,17 @@
                     <td class="{% if data.profit >= 0 %}text-success{% else %}text-danger{% endif %}">
                         <strong>₹{{ data.profit|floatformat:2 }}</strong>
                     </td>
+                    <td class="text-warning">
+                        {% if data.taken > 0 %}
+                        ₹{{ data.taken|floatformat:2 }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="4" class="empty-state">
+                    <td colspan="5" class="empty-state">
                         <div class="empty-content">
                             <i class="fas fa-calendar-times"></i>
                             <h3>No Data for {{ selected_year }}</h3>
@@ -219,16 +318,60 @@
     .filter-container {
         background: white;
         border-radius: 1rem;
-        padding: 1.5rem;
+        padding: 1rem 1.5rem;
         margin-bottom: 2rem;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         border: 1px solid #f3f4f6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+    }
+
+    .filter-section {
+        flex: 1;
+        display: flex;
+        align-items: center;
+    }
+
+    .center-section {
+        justify-content: center;
+        border-left: 1px solid #f3f4f6;
+        border-right: 1px solid #f3f4f6;
+        padding: 0 1.5rem;
+    }
+
+    .right-section {
+        justify-content: flex-end;
+    }
+
+    .balance-display {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .balance-label {
+        font-size: 0.75rem;
+        color: #6b7280;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .balance-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        line-height: 1;
     }
 
     .filter-form {
         display: flex;
         align-items: center;
         gap: 1rem;
+        margin: 0;
     }
 
     .filter-form label {
@@ -237,6 +380,7 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
+        white-space: nowrap;
     }
 
     .filter-form label i {
@@ -251,6 +395,7 @@
         background: white;
         cursor: pointer;
         transition: all 0.2s;
+        min-width: 120px;
     }
 
     .filter-form select:focus {
@@ -374,13 +519,38 @@
             grid-template-columns: 1fr;
         }
 
-        .filter-form {
+        .filter-container {
             flex-direction: column;
-            align-items: flex-start;
+            align-items: stretch;
+            gap: 1.5rem;
+            padding: 1.5rem;
+        }
+
+        .filter-section {
+            width: 100%;
+            justify-content: center;
+            border: none;
+            padding: 0;
+        }
+
+        .filter-form {
+            width: 100%;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .right-section {
+            justify-content: center;
+        }
+
+        .right-section .btn {
+            width: 100%;
+            justify-content: center;
         }
 
         .filter-form select {
-            width: 100%;
+            width: auto;
+            flex: 1;
         }
 
         .page-title {
@@ -392,4 +562,208 @@
         }
     }
 </style>
+
+<!-- Modal Styles -->
+<style>
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        backdrop-filter: blur(4px);
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 1rem;
+        width: 90%;
+        max-width: 500px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        animation: modalSlideIn 0.3s ease-out;
+    }
+
+    @keyframes modalSlideIn {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+
+    .modal-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .modal-header h3 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .close-btn {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: #6b7280;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+    }
+
+    .close-btn:hover {
+        color: var(--text-primary);
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .info-row:last-child {
+        border-bottom: none;
+    }
+
+    .info-row .label {
+        color: #6b7280;
+        font-weight: 500;
+    }
+
+    .info-row .value {
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    .form-input {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.5rem;
+        font-size: 1rem;
+        transition: all 0.2s;
+    }
+
+    .form-input:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
+    }
+
+    .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        margin-top: 2rem;
+    }
+</style>
+
+<!-- Taken Amount Modal -->
+<div id="takenAmountModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Take Amount from <span id="modalVehicleName"></span></h3>
+            <button type="button" class="close-btn" onclick="closeTakenAmountModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="info-row">
+                <span class="label">Available Balance:</span>
+                <span class="value text-success" id="modalBalance">
+                    ₹0.00
+                </span>
+            </div>
+            <div class="info-row">
+                <span class="label">Current Date:</span>
+                <span class="value" id="currentDate"></span>
+            </div>
+
+            <form action="{% url 'update_taken_amount' user_obj.pk %}" method="post" class="update-form">
+                {% csrf_token %}
+                <input type="hidden" name="vehicle_id" id="modalVehicleId">
+                <div class="form-group">
+                    <label for="amount">Amount to Take</label>
+                    <input type="number" name="amount" id="amount" step="0.01" class="form-input" required>
+                    <small class="text-muted" style="display: block; margin-top: 0.5rem; color: #6b7280;">
+                        This amount will be recorded for this specific vehicle.
+                    </small>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeTakenAmountModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Confirm Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openTakenAmountModal(vehicleId, vehicleName, balance) {
+        const modal = document.getElementById('takenAmountModal');
+        const dateSpan = document.getElementById('currentDate');
+        const vehicleNameSpan = document.getElementById('modalVehicleName');
+        const balanceSpan = document.getElementById('modalBalance');
+        const vehicleIdInput = document.getElementById('modalVehicleId');
+        const amountInput = document.getElementById('amount');
+
+        // Set vehicle information
+        vehicleNameSpan.textContent = vehicleName;
+        balanceSpan.textContent = '₹' + parseFloat(balance).toFixed(2);
+        vehicleIdInput.value = vehicleId;
+        amountInput.value = parseFloat(balance).toFixed(2);
+        amountInput.max = balance;
+
+        // Set current date
+        const now = new Date();
+        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        dateSpan.textContent = now.toLocaleDateString('en-US', options);
+
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden'; // Prevent background scrolling
+    }
+
+    function closeTakenAmountModal() {
+        const modal = document.getElementById('takenAmountModal');
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('takenAmountModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeTakenAmountModal();
+        }
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && document.getElementById('takenAmountModal').style.display === 'flex') {
+            closeTakenAmountModal();
+        }
+    });
+</script>
 {% endblock %}
