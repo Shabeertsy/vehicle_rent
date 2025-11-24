@@ -93,17 +93,57 @@ class UserEditForm(forms.ModelForm):
     first_name = forms.CharField(max_length=30, required=True, help_text="Enter first name")
     last_name = forms.CharField(max_length=30, required=True, help_text="Enter last name")
     is_active = forms.BooleanField(required=False, help_text="Inactive users cannot log in")
+    new_password = forms.CharField(widget=forms.PasswordInput, required=False, help_text="Leave blank to keep current password")
+    confirm_password = forms.CharField(widget=forms.PasswordInput, required=False, help_text="Enter the new password again")
+
+    # Permission fields
+    can_manage_users = forms.BooleanField(required=False, help_text="Allow user to add, edit, and delete other users")
+    can_manage_vehicles = forms.BooleanField(required=False, help_text="Allow user to add, edit, and delete vehicles")
+    can_import_data = forms.BooleanField(required=False, help_text="Allow user to access import data functionality")
+
     class Meta:
         model = User
         fields = ['username', 'email', 'first_name', 'last_name', 'is_active']
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Load current permissions from profile
+        if self.instance and self.instance.pk:
+            try:
+                profile = self.instance.profile
+                self.fields['can_manage_users'].initial = profile.can_manage_users
+                self.fields['can_manage_vehicles'].initial = profile.can_manage_vehicles
+                self.fields['can_import_data'].initial = profile.can_import_data
+            except UserProfile.DoesNotExist:
+                pass
+
+    def clean(self):
+        cleaned_data = super().clean()
+        new_password = cleaned_data.get("new_password")
+        confirm_password = cleaned_data.get("confirm_password")
+
+        if new_password and new_password != confirm_password:
+            self.add_error('confirm_password', "Passwords do not match")
+
+        return cleaned_data
+
     def save(self, commit=True):
         user = super().save(commit=False)
-        user.is_staff = False
-        user.is_superuser = False
+        # Only reset permissions if not a superuser to avoid locking out admin
+        if not user.is_superuser:
+            user.is_staff = False
+            user.is_superuser = False
+
+        new_password = self.cleaned_data.get('new_password')
+        if new_password:
+            user.set_password(new_password)
 
         if commit:
             user.save()
-            # Ensure profile exists
-            UserProfile.objects.get_or_create(user=user, defaults={'user_type': 'partner'})
+            # Ensure profile exists and update permissions
+            profile, created = UserProfile.objects.get_or_create(user=user, defaults={'user_type': 'partner'})
+            profile.can_manage_users = self.cleaned_data.get('can_manage_users', False)
+            profile.can_manage_vehicles = self.cleaned_data.get('can_manage_vehicles', False)
+            profile.can_import_data = self.cleaned_data.get('can_import_data', False)
+            profile.save()
         return user

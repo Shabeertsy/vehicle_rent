@@ -11,22 +11,58 @@ from .models import Vehicle, Rental, Expense, UserProfile, TakenAmount
 from .forms import VehicleForm, RentalForm, ExpenseForm, UserCreateForm, UserEditForm
 import pandas as pd
 from datetime import datetime, date
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.forms import AuthenticationForm
 
+
+
+
+def login_view(request):
+    if request.method == 'POST':
+        form = AuthenticationForm(request, data=request.POST)
+        if form.is_valid():
+            username = form.cleaned_data.get('username')
+            password = form.cleaned_data.get('password')
+            user = authenticate(username=username, password=password)
+            if user is not None:
+                login(request, user)
+                messages.info(request, f"You are now logged in as {username}.")
+                return redirect('dashboard')
+            else:
+                messages.error(request, "Invalid username or password.")
+        else:
+            messages.error(request, "Invalid username or password.")
+    else:
+        form = AuthenticationForm()
+    return render(request, 'login.html', {'form': form})
+
+
+def logout_view(request):
+    logout(request)
+    messages.info(request, "You have successfully logged out.")
+    return redirect('login')
+
+
+@login_required
 def dashboard(request):
-    # Overall Analytics
-    total_income = Rental.objects.aggregate(Sum('total_amount_received'))['total_amount_received__sum'] or 0
-    total_expense = Expense.objects.aggregate(Sum('amount'))['amount__sum'] or 0
+    # Filter vehicles based on user permissions
+    if request.user.is_superuser:
+        # Admin sees all vehicles
+        vehicles = Vehicle.objects.all()
+    else:
+        # Partners only see vehicles they are partnered with
+        vehicles = Vehicle.objects.filter(partners=request.user)
+
+    # Calculate totals based on filtered vehicles
+    total_income = Rental.objects.filter(vehicle__in=vehicles).aggregate(Sum('total_amount_received'))['total_amount_received__sum'] or 0
+    total_expense = Expense.objects.filter(vehicle__in=vehicles).aggregate(Sum('amount'))['amount__sum'] or 0
     profit = total_income - total_expense
-    active_vehicles_count = Vehicle.objects.count()
+    active_vehicles_count = vehicles.count()
 
-    # Monthly Data for Graph and Table
-    # Group rentals by month
-    rentals_by_month = Rental.objects.annotate(month=TruncMonth('date_out')).values('month').annotate(income=Sum('total_amount_received')).order_by('month')
+    rentals_by_month = Rental.objects.filter(vehicle__in=vehicles).annotate(month=TruncMonth('date_out')).values('month').annotate(income=Sum('total_amount_received')).order_by('month')
+    expenses_by_month = Expense.objects.filter(vehicle__in=vehicles).annotate(month=TruncMonth('date')).values('month').annotate(expense=Sum('amount')).order_by('month')
 
-    # Group expenses by month
-    expenses_by_month = Expense.objects.annotate(month=TruncMonth('date')).values('month').annotate(expense=Sum('amount')).order_by('month')
-
-    # Merge data
     monthly_data = {}
 
     for r in rentals_by_month:
@@ -41,15 +77,12 @@ def dashboard(request):
             monthly_data[month] = {'month': month, 'income': 0, 'expense': 0, 'profit': 0}
         monthly_data[month]['expense'] += float(e['expense'])
 
-    # Calculate profit for each month
     final_monthly_data = []
     for month, data in monthly_data.items():
         data['profit'] = data['income'] - data['expense']
         final_monthly_data.append(data)
 
-    # Sort by date (parsing the month string back to date for sorting)
     final_monthly_data.sort(key=lambda x: datetime.strptime(x['month'], '%B %Y'))
-
     context = {
         'total_income': total_income,
         'total_expense': total_expense,
@@ -59,13 +92,26 @@ def dashboard(request):
     }
     return render(request, 'dashboard.html', context)
 
+
 # Vehicle Views
+@login_required
 def vehicle_list(request):
-    vehicles = Vehicle.objects.all()
+    if request.user.is_superuser:
+        vehicles = Vehicle.objects.all()
+    else:
+        vehicles = Vehicle.objects.filter(partners=request.user)
     return render(request, 'vehicle_list.html', {'vehicles': vehicles})
 
+
+@login_required
 def vehicle_detail(request, pk):
     vehicle = get_object_or_404(Vehicle, pk=pk)
+
+    # Check permission
+    if not request.user.is_superuser and not vehicle.partners.filter(pk=request.user.pk).exists():
+        messages.error(request, "You do not have permission to view this vehicle.")
+        return redirect('vehicle_list')
+
     rentals = vehicle.rentals.all().order_by('-date_out')
     expenses = vehicle.expenses.all().order_by('-date')
 
@@ -73,13 +119,9 @@ def vehicle_detail(request, pk):
     total_expense = expenses.aggregate(Sum('amount'))['amount__sum'] or 0
     profit = total_revenue - total_expense
 
-    # Monthly breakdown for this vehicle (income, expense, profit per month) including all months
-    # Rentals grouped by month
     rentals_by_month = rentals.annotate(month=TruncMonth('date_out')).values('month').annotate(income=Sum('total_amount_received')).order_by('month')
-    # Expenses grouped by month
     expenses_by_month = expenses.annotate(month=TruncMonth('date')).values('month').annotate(expense=Sum('amount')).order_by('month')
 
-    # Figure out the month range present in rentals/expenses
     min_month = None
     max_month = None
 
@@ -95,18 +137,17 @@ def vehicle_detail(request, pk):
         today = date.today().replace(day=1)
         min_month = max_month = today
 
-    # Build a list of all months from min_month to max_month
+
     current = min_month.replace(day=1)
     months = []
     while current <= max_month:
         months.append(current)
-        # Move to next month
+
         if current.month == 12:
             current = current.replace(year=current.year + 1, month=1)
         else:
             current = current.replace(month=current.month + 1)
 
-    # Prepare lookups
     rental_map = {r['month']: float(r['income'] or 0) for r in rentals_by_month if r['month']}
     expense_map = {e['month']: float(e['expense'] or 0) for e in expenses_by_month if e['month']}
 
@@ -116,15 +157,13 @@ def vehicle_detail(request, pk):
         expense = expense_map.get(month_dt, 0)
         profit_val = income - expense
         monthly_data.append({
-            'month': month_dt,  # Pass the date object directly
+            'month': month_dt,
             'income': income,
             'expense': expense,
             'profit': profit_val
         })
 
-    # Pass months (as list of date objects) to the front end, so template can access all months explicitly.
 
-    # Check EMI status
     emi_warning = False
     emi_due_date = None
     emi_is_paid = False
@@ -135,18 +174,17 @@ def vehicle_detail(request, pk):
         if emi_config.is_active:
             today = date.today()
 
-            # Calculate due date for this month
+
             try:
                 due_date = date(today.year, today.month, emi_config.due_day)
             except ValueError:
-                # Handle months with fewer days (e.g., Feb 30 -> Feb 28/29)
                 import calendar
                 last_day = calendar.monthrange(today.year, today.month)[1]
                 due_date = date(today.year, today.month, last_day)
 
             emi_due_date = due_date
 
-            # Check if paid using EMIPayment model
+
             from .models import EMIPayment
             emi_is_paid = EMIPayment.objects.filter(
                 vehicle=vehicle,
@@ -159,7 +197,6 @@ def vehicle_detail(request, pk):
                 if days_until_emi <= emi_config.warning_days:
                     emi_warning = True
     except Exception:
-        # No EMI configured for this vehicle or other error
         emi_config = None
 
     # Get EMI history
@@ -170,12 +207,12 @@ def vehicle_detail(request, pk):
         'vehicle': vehicle,
         'rentals': rentals,
         'expenses': expenses,
-        'emi_payments': emi_payments,  # Add this line
+        'emi_payments': emi_payments,
         'total_revenue': total_revenue,
         'total_expense': total_expense,
         'profit': profit,
         'monthly_data': monthly_data,
-        'all_months': months,   # <<<This is the additional context variable
+        'all_months': months,
         'emi_warning': emi_warning,
         'emi_due_date': emi_due_date,
         'emi_is_paid': emi_is_paid,
@@ -184,13 +221,19 @@ def vehicle_detail(request, pk):
     }
     return render(request, 'vehicle_detail.html', context)
 
+
+@login_required
 def vehicle_create(request):
+    # Check permission
+    if not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.can_manage_vehicles)):
+        messages.error(request, "You do not have permission to create vehicles.")
+        return redirect('vehicle_list')
+
     if request.method == 'POST':
         form = VehicleForm(request.POST, request.FILES)
         if form.is_valid():
             vehicle = form.save()
 
-            # Handle partners manually from POST data
             partner_ids = request.POST.getlist('partners')
             if partner_ids:
                 partners = User.objects.filter(pk__in=partner_ids, is_active=True)
@@ -206,14 +249,20 @@ def vehicle_create(request):
     partners = User.objects.filter(is_active=True).order_by('username')
     return render(request, 'form.html', {'form': form, 'title': 'Add Vehicle', 'partners': partners})
 
+
+@login_required
 def vehicle_edit(request, pk):
+    # Check permission
+    if not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.can_manage_vehicles)):
+        messages.error(request, "You do not have permission to edit vehicles.")
+        return redirect('vehicle_list')
+
     vehicle = get_object_or_404(Vehicle, pk=pk)
     if request.method == 'POST':
         form = VehicleForm(request.POST, request.FILES, instance=vehicle)
         if form.is_valid():
             vehicle = form.save()
 
-            # Handle partners manually from POST data
             partner_ids = request.POST.getlist('partners')
             if partner_ids:
                 partners = User.objects.filter(pk__in=partner_ids, is_active=True)
@@ -236,7 +285,14 @@ def vehicle_edit(request, pk):
         'vehicle': vehicle
     })
 
+
+@login_required
 def vehicle_delete(request, pk):
+    # Check permission
+    if not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.can_manage_vehicles)):
+        messages.error(request, "You do not have permission to delete vehicles.")
+        return redirect('vehicle_list')
+
     vehicle = get_object_or_404(Vehicle, pk=pk)
     if request.method == 'POST':
         vehicle.delete()
@@ -244,7 +300,9 @@ def vehicle_delete(request, pk):
         return redirect('vehicle_list')
     return render(request, 'confirm_delete.html', {'object': vehicle})
 
+
 # Rental Views
+@login_required
 def rental_create(request, vehicle_id):
     vehicle = get_object_or_404(Vehicle, pk=vehicle_id)
     if request.method == 'POST':
@@ -271,6 +329,8 @@ def rental_create(request, vehicle_id):
         form = RentalForm(initial=initial_data)
     return render(request, 'form.html', {'form': form, 'title': f'Add Rental for {vehicle.name}'})
 
+
+@login_required
 def rental_edit(request, pk):
     rental = get_object_or_404(Rental, pk=pk)
     if request.method == 'POST':
@@ -283,6 +343,8 @@ def rental_edit(request, pk):
         form = RentalForm(instance=rental)
     return render(request, 'form.html', {'form': form, 'title': 'Edit Rental'})
 
+
+@login_required
 def rental_delete(request, pk):
     rental = get_object_or_404(Rental, pk=pk)
     vehicle_id = rental.vehicle.id
@@ -292,7 +354,9 @@ def rental_delete(request, pk):
         return redirect('vehicle_detail', pk=vehicle_id)
     return render(request, 'confirm_delete.html', {'object': rental})
 
+
 # Expense Views
+@login_required
 def expense_create(request, vehicle_id):
     vehicle = get_object_or_404(Vehicle, pk=vehicle_id)
     if request.method == 'POST':
@@ -317,6 +381,8 @@ def expense_create(request, vehicle_id):
         form = ExpenseForm()
     return render(request, 'form.html', {'form': form, 'title': f'Add Expense for {vehicle.name}'})
 
+
+@login_required
 def expense_edit(request, pk):
     expense = get_object_or_404(Expense, pk=pk)
     if request.method == 'POST':
@@ -329,6 +395,8 @@ def expense_edit(request, pk):
         form = ExpenseForm(instance=expense)
     return render(request, 'form.html', {'form': form, 'title': 'Edit Expense'})
 
+
+@login_required
 def expense_delete(request, pk):
     expense = get_object_or_404(Expense, pk=pk)
     vehicle_id = expense.vehicle.id
@@ -338,8 +406,15 @@ def expense_delete(request, pk):
         return redirect('vehicle_detail', pk=vehicle_id)
     return render(request, 'confirm_delete.html', {'object': expense})
 
+
 # Excel Import
+@login_required
 def import_data(request):
+    # Check permission
+    if not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.can_import_data)):
+        messages.error(request, "You do not have permission to import data.")
+        return redirect('dashboard')
+
     vehicles = Vehicle.objects.all()
     import_errors = []
     selected_vehicle_id = None
@@ -555,9 +630,23 @@ def import_data(request):
 
 
 # User Management Views
+@login_required
 def user_list(request):
-    """Display list of all users"""
-    users = User.objects.all().order_by('-date_joined')
+    """Display list of users. Admin sees all, partners see themselves and their partners."""
+    if request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.can_manage_users):
+        # Admin or users with manage permission see all users
+        users = User.objects.all().order_by('-date_joined')
+    else:
+        # Regular users only see themselves and their partners
+        # Get all vehicles where the current user is a partner
+        user_vehicles = Vehicle.objects.filter(partners=request.user)
+        # Get all partners from these vehicles, including the user themselves
+        users = User.objects.filter(vehicles__in=user_vehicles).distinct().order_by('username')
+
+        # If user has no vehicles, at least show themselves
+        if not users.exists():
+            users = User.objects.filter(pk=request.user.pk)
+
     active_count = users.filter(is_active=True).count()
     inactive_count = users.filter(is_active=False).count()
 
@@ -568,10 +657,19 @@ def user_list(request):
     }
     return render(request, 'user_list.html', context)
 
+
+@login_required
 def user_detail(request, pk):
     user = get_object_or_404(User, pk=pk)
 
-    # Get filter year, default to current year
+    # Permission check
+    if not request.user.is_superuser and request.user != user:
+        # Check if they share any vehicle
+        shared_vehicles = Vehicle.objects.filter(partners=request.user).filter(partners=user)
+        if not shared_vehicles.exists():
+            messages.error(request, "You do not have permission to view this user.")
+            return redirect('user_list')
+
     current_year = datetime.now().year
     selected_year = request.GET.get('year', current_year)
     try:
@@ -579,21 +677,15 @@ def user_detail(request, pk):
     except ValueError:
         selected_year = current_year
 
-    # Filter rentals and expenses by user and year (for context, though not used in monthly breakdown)
     rentals = Rental.objects.filter(user=user, date_out__year=selected_year).order_by('-date_out')
     expenses = Expense.objects.filter(user=user, date__year=selected_year).order_by('-date')
 
-    # Calculate totals for the selected year (based on profit sharing)
     total_income = 0
     total_expense = 0
     profit = 0
 
-    # Monthly breakdown data structures (using month numbers 1-12 as keys)
-    monthly_shares = {}  # For income/expense from vehicles
-    monthly_taken = {}   # For taken amounts
-
-    # 1. Calculate monthly share from vehicles
-    # Get all vehicles where user is a partner
+    monthly_shares = {}
+    monthly_taken = {}
     vehicles = user.vehicles.all()
 
     for vehicle in vehicles:
@@ -615,7 +707,6 @@ def user_detail(request, pk):
                     monthly_shares[m_idx] = {'income': 0, 'expense': 0}
                 monthly_shares[m_idx]['expense'] += float(e['expense']) / num_partners
 
-    # 2. Calculate monthly taken amounts
     taken_amounts = TakenAmount.objects.filter(user=user, date__year=selected_year).order_by('-date')
     taken_by_month = taken_amounts.annotate(month=TruncMonth('date')).values('month').annotate(amount=Sum('amount')).order_by('month')
 
@@ -623,10 +714,8 @@ def user_detail(request, pk):
         m_idx = t['month'].month
         monthly_taken[m_idx] = float(t['amount'])
 
-    # 3. Merge into final monthly data
     final_monthly_data = []
 
-    # Helper for month names
     import calendar
 
     for m_idx in range(1, 13):
@@ -652,10 +741,6 @@ def user_detail(request, pk):
         # Only add if there's data
         if data['income'] != 0 or data['expense'] != 0 or data['taken'] != 0:
             final_monthly_data.append(data)
-
-    # Calculate vehicle-based profit shares and taken amounts (All time or selected year? Usually all time for balance)
-    # But for the table we might want to show selected year stats?
-    # The balance is usually a running balance.
 
     vehicle_data = []
     total_profit_share = Decimal('0')
@@ -725,7 +810,7 @@ def user_detail(request, pk):
         'total_income': total_income,
         'total_expense': total_expense,
         'profit': profit,
-        'taken_amount': total_taken, # This is all-time taken amount
+        'taken_amount': total_taken,
         'remaining_balance': remaining_balance,
         'monthly_data': final_monthly_data,
         'selected_year': selected_year,
@@ -734,7 +819,13 @@ def user_detail(request, pk):
     }
     return render(request, 'user_detail.html', context)
 
+@login_required
 def user_create(request):
+    # Check permission
+    if not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.can_manage_users)):
+        messages.error(request, "You do not have permission to create users.")
+        return redirect('user_list')
+
     """Create a new user"""
     if request.method == 'POST':
         form = UserCreateForm(request.POST)
@@ -746,7 +837,13 @@ def user_create(request):
         form = UserCreateForm()
     return render(request, 'form.html', {'form': form, 'title': 'Add User'})
 
+@login_required
 def user_edit(request, pk):
+    # Check permission
+    if not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.can_manage_users)):
+        messages.error(request, "You do not have permission to edit users.")
+        return redirect('user_list')
+
     """Edit an existing user"""
     user = get_object_or_404(User, pk=pk)
     if request.method == 'POST':
@@ -759,7 +856,13 @@ def user_edit(request, pk):
         form = UserEditForm(instance=user)
     return render(request, 'form.html', {'form': form, 'title': f'Edit User: {user.username}'})
 
+@login_required
 def user_delete(request, pk):
+    # Check permission
+    if not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.can_manage_users)):
+        messages.error(request, "You do not have permission to delete users.")
+        return redirect('user_list')
+
     """Delete a user"""
     user = get_object_or_404(User, pk=pk)
     if request.method == 'POST':
@@ -769,8 +872,14 @@ def user_delete(request, pk):
         return redirect('user_list')
     return render(request, 'confirm_delete.html', {'object': user, 'object_type': 'user'})
 
+@login_required
 @require_POST
 def update_taken_amount(request, pk):
+    # Check permission
+    if not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.can_manage_users)):
+        messages.error(request, "You do not have permission to update taken amounts.")
+        return redirect('user_list')
+
     """Update the taken amount for a user from a specific vehicle"""
     user = get_object_or_404(User, pk=pk)
     amount = request.POST.get('amount')

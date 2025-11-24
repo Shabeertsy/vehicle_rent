@@ -26,13 +26,17 @@
         <button type="button" class="btn btn-success" onclick="downloadExcel()" id="download-excel-btn">
             <i class="fas fa-file-excel"></i> Download Excel
         </button>
+        {% if request.user.is_superuser or request.user.profile.can_import_data %}
         <a href="{% url 'import_data' %}?vehicle_id={{ vehicle.id }}" class="btn btn-primary"
             style="background-color: var(--warning);"><i class="fas fa-file-import"></i> Import Excel</a>
+        {% endif %}
+        {% if request.user.is_superuser or request.user.profile.can_manage_vehicles %}
         <button type="button" class="btn btn-primary" onclick="openEmiModal()" style="background-color: #8b5cf6;">
             <i class="fas fa-cog"></i> EMI Settings
         </button>
         <a href="{% url 'vehicle_edit' vehicle.id %}" class="btn btn-primary">Edit Vehicle</a>
         <a href="{% url 'vehicle_delete' vehicle.id %}" class="btn btn-danger">Delete</a>
+        {% endif %}
     </div>
 </div>
 
@@ -188,7 +192,9 @@
     <div id="rentals" class="tab-content" style="display: block;">
         <div class="flex justify-between items-center mb-4">
             <h3 class="card-title" style="font-size: 1.1rem; color: var(--text-primary);">Rental History</h3>
+            {% if request.user.is_superuser or request.user.profile.can_manage_vehicles %}
             <a href="{% url 'rental_create' vehicle.id %}" class="btn btn-primary btn-sm">Add Rental</a>
+            {% endif %}
         </div>
         <div class="table-container" style="box-shadow: none; padding: 0;">
             <table>
@@ -231,10 +237,14 @@
                         <td>₹{{ rental.rent_per_day }}</td>
                         <td>₹{{ rental.total_amount_received }}</td>
                         <td>
+                            {% if request.user.is_superuser or request.user.profile.can_manage_vehicles %}
                             <a href="{% url 'rental_edit' rental.id %}" class="text-primary"><i
                                     class="fas fa-edit"></i></a>
                             <a href="{% url 'rental_delete' rental.id %}" class="text-danger"
                                 style="margin-left: 0.5rem;"><i class="fas fa-trash"></i></a>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
                         </td>
                     </tr>
                     {% empty %}
@@ -270,7 +280,9 @@
                     </button>
                 </form>
                 {% endif %}
+                {% if request.user.is_superuser or request.user.profile.can_manage_vehicles %}
                 <a href="{% url 'expense_create' vehicle.id %}" class="btn btn-primary btn-sm">Add Expense</a>
+                {% endif %}
             </div>
         </div>
         <div class="table-container" style="box-shadow: none; padding: 0;">
@@ -292,10 +304,14 @@
                         <td>{{ expense.place }}</td>
                         <td class="text-danger">₹{{ expense.amount }}</td>
                         <td>
+                            {% if request.user.is_superuser or request.user.profile.can_manage_vehicles %}
                             <a href="{% url 'expense_edit' expense.id %}" class="text-primary"><i
                                     class="fas fa-edit"></i></a>
                             <a href="{% url 'expense_delete' expense.id %}" class="text-danger"
                                 style="margin-left: 0.5rem;"><i class="fas fa-trash"></i></a>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
                         </td>
                     </tr>
                     {% empty %}

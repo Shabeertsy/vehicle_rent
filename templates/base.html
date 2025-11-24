@@ -38,16 +38,26 @@
                 </a>
             </li>
 
+            {% if request.user.is_superuser or request.user.profile.can_manage_users %}
             <li class="nav-item">
                 <a href="{% url 'user_list' %}" class="nav-link {% if 'user' in request.path %}active{% endif %}">
                     <i class="fas fa-users"></i>
                     <span>Users</span>
                 </a>
             </li>
+            {% endif %}
+            {% if request.user.is_superuser or request.user.profile.can_import_data %}
             <li class="nav-item">
                 <a href="{% url 'import_data' %}" class="nav-link {% if 'import' in request.path %}active{% endif %}">
                     <i class="fas fa-file-import"></i>
                     <span>Import Data</span>
+                </a>
+            </li>
+            {% endif %}
+            <li class="nav-item mt-auto">
+                <a href="{% url 'logout' %}" class="nav-link">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
                 </a>
             </li>
         </ul>
@@ -83,16 +93,26 @@
                     <span>Vehicles</span>
                 </a>
             </li>
+            {% if request.user.is_superuser or request.user.profile.can_import_data %}
             <li class="nav-item">
                 <a href="{% url 'import_data' %}" class="nav-link {% if 'import' in request.path %}active{% endif %}">
                     <i class="fas fa-file-import"></i>
                     <span>Import</span>
                 </a>
             </li>
+            {% endif %}
+            {% if request.user.is_superuser or request.user.profile.can_manage_users %}
             <li class="nav-item">
                 <a href="{% url 'user_list' %}" class="nav-link {% if 'user' in request.path %}active{% endif %}">
                     <i class="fas fa-users"></i>
                     <span>Users</span>
+                </a>
+            </li>
+            {% endif %}
+            <li class="nav-item">
+                <a href="{% url 'logout' %}" class="nav-link">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
                 </a>
             </li>
         </ul>

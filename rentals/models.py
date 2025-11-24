@@ -10,6 +10,12 @@ class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     user_type = models.CharField(max_length=20, default='partner')
     taken_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    # Permissions
+    can_manage_users = models.BooleanField(default=False, help_text="Can add, edit, and delete users")
+    can_manage_vehicles = models.BooleanField(default=False, help_text="Can add, edit, and delete vehicles")
+    can_import_data = models.BooleanField(default=False, help_text="Can access import data functionality")
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -54,7 +60,6 @@ class Rental(models.Model):
 
     total_amount_received = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     discounted_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -78,7 +83,6 @@ class Expense(models.Model):
     place = models.CharField(max_length=100, blank=True, null=True)
     care_of = models.CharField(max_length=100, blank=True, null=True, verbose_name="C/O")
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

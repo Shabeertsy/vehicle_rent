@@ -4,26 +4,16 @@ from django.template.loader import render_to_string
 
 
 def send_partner_notification(vehicle, action_type, details):
-    """
-    Send email notification to all partners of a vehicle
-
-    Args:
-        vehicle: Vehicle instance
-        action_type: 'rental', 'expense', or 'emi_payment'
-        details: Dictionary with relevant details
-    """
     partners = vehicle.partners.filter(is_active=True)
 
     if not partners.exists():
         return
 
-    # Get partner emails
     recipient_emails = [partner.email for partner in partners if partner.email]
 
     if not recipient_emails:
         return
 
-    # Prepare email content based on action type
     if action_type == 'rental':
         subject = f'New Rental Added - {vehicle.name}'
         message = f"""
@@ -66,15 +56,13 @@ This is an automated notification from Vehicle Manager.
     else:
         return
 
-    # Send email
     try:
         send_mail(
             subject=subject,
             message=message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=recipient_emails,
-            fail_silently=True,  # Don't raise errors if email fails
+            fail_silently=True,
         )
     except Exception as e:
-        # Log error but don't stop the operation
         print(f"Email notification failed: {str(e)}")

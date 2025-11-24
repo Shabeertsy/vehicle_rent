@@ -10,7 +10,14 @@
                 <i class="fas fa-chart-line"></i>
                 Dashboard
             </h1>
-            <p class="page-subtitle">Overview of your vehicle management system</p>
+            <p class="page-subtitle">
+                Welcome back, <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>!
+                {% if request.user.is_superuser %}
+                    Here's your complete system overview.
+                {% else %}
+                    Here's your vehicle portfolio overview.
+                {% endif %}
+            </p>
         </div>
         <div class="header-right">
             <button class="btn btn-secondary" onclick="window.print()">

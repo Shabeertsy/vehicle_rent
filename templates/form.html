@@ -23,7 +23,7 @@
             <div class="form-grid">
                 {% for field in form %}
                 <div
-                    class="form-field {% if field.field.widget.input_type == 'checkbox' %}checkbox-field{% endif %} {% if field.name == 'password1' or field.name == 'password2' or field.name == 'partners' %}full-width{% endif %}">
+                    class="form-field {% if field.field.widget.input_type == 'checkbox' %}checkbox-field{% endif %} {% if field.name == 'password1' or field.name == 'password2' or field.name == 'new_password' or field.name == 'confirm_password' or field.name == 'partners' %}full-width{% endif %}">
                     {% if field.field.widget.input_type == 'checkbox' %}
                     <div class="checkbox-container">
                         <label class="checkbox-wrapper">
@@ -82,7 +82,7 @@
                         <i class="input-icon fas fa-envelope"></i>
                         {% elif field.name == 'username' %}
                         <i class="input-icon fas fa-user"></i>
-                        {% elif field.name == 'password1' or field.name == 'password2' %}
+                        {% elif field.name == 'password1' or field.name == 'password2' or field.name == 'new_password' or field.name == 'confirm_password' %}
                         <i class="input-icon fas fa-lock"></i>
                         {% elif field.name == 'first_name' or field.name == 'last_name' %}
                         <i class="input-icon fas fa-id-card"></i>

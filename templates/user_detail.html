@@ -17,10 +17,12 @@
                 <i class="fas fa-arrow-left"></i>
                 <span>Back to Users</span>
             </a>
+            {% if request.user.is_superuser or request.user.profile.can_manage_users %}
             <a href="{% url 'user_edit' user_obj.pk %}" class="btn btn-primary">
                 <i class="fas fa-edit"></i>
                 <span>Edit User</span>
             </a>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -143,11 +145,15 @@
                         <strong>₹{{ vdata.balance|floatformat:2 }}</strong>
                     </td>
                     <td>
+                        {% if request.user.is_superuser or request.user.profile.can_manage_users %}
                         <button type="button" class="btn btn-sm btn-primary"
                                 onclick="openTakenAmountModal({{ vdata.vehicle.id }}, '{{ vdata.vehicle.name|escapejs }}', {{ vdata.balance }})">
                             <i class="fas fa-hand-holding-usd"></i>
                             Take Amount
                         </button>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}

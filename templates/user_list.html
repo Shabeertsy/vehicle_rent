@@ -13,10 +13,12 @@
             <p class="page-subtitle">Manage system users and their access levels</p>
         </div>
         <div class="header-right">
+            {% if request.user.is_superuser or request.user.profile.can_manage_users %}
             <a href="{% url 'user_create' %}" class="btn btn-primary">
                 <i class="fas fa-user-plus"></i>
                 <span>Add New User</span>
             </a>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -161,12 +163,16 @@
                     </td>
                     <td>
                         <div class="action-buttons">
+                            {% if request.user.is_superuser or request.user.profile.can_manage_users %}
                             <a href="{% url 'user_edit' user.pk %}" class="action-btn edit-btn" title="Edit User">
                                 <i class="fas fa-edit"></i>
                             </a>
                             <a href="{% url 'user_delete' user.pk %}" class="action-btn delete-btn" title="Delete User">
                                 <i class="fas fa-trash-alt"></i>
                             </a>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
@@ -177,10 +183,12 @@
                             <i class="fas fa-users"></i>
                             <h3>No Users Found</h3>
                             <p>Get started by adding your first user</p>
+                            {% if request.user.is_superuser or request.user.profile.can_manage_users %}
                             <a href="{% url 'user_create' %}" class="btn btn-primary">
                                 <i class="fas fa-user-plus"></i>
                                 Add First User
                             </a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
